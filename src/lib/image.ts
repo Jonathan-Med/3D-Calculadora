@@ -23,12 +23,3 @@ export async function renderPng(node: HTMLElement): Promise<Blob> {
   if (!blob) throw new Error('No se pudo generar la imagen')
   return blob
 }
-
-export function downloadBlob(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  link.click()
-  URL.revokeObjectURL(url)
-}

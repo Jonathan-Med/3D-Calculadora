@@ -1,11 +1,12 @@
-import { CircleCheck, CircleX, TriangleAlert } from 'lucide-react'
-import type { ReactNode } from 'react'
-import { Card, NumberField } from '../../components/ui'
+import { CircleCheck, CircleX, Save, TriangleAlert } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
+import { Button, Card, NumberField } from '../../components/ui'
 import type { QuantityScenario } from '../../domain/batch'
 import type {
   CostBreakdown,
   PriceEvaluation,
   PriceVerdict,
+  SavedQuote,
   Settings,
   SuggestedPrice,
 } from '../../domain/types'
@@ -22,6 +23,7 @@ interface Props {
   chosen: ChosenPrice | null
   draft: QuoteDraft
   onChange: (changes: Partial<QuoteDraft>) => void
+  onSave: (status: SavedQuote['status']) => Promise<void>
   scenarios: QuantityScenario[]
   /** Piezas que salen de un rollo; null si aún no hay gramos capturados. */
   spool: { pieces: number; name: string } | null
@@ -36,6 +38,7 @@ export function QuoteResult({
   chosen,
   draft,
   onChange,
+  onSave,
   scenarios,
   spool,
   laborMinutes,
@@ -175,6 +178,8 @@ export function QuoteResult({
         />
       )}
 
+      {chosen && <SaveCard draft={draft} chosen={chosen} onSave={onSave} />}
+
       {spool && (
         <Card title="Lotes y rollo">
           <p className="text-sm">
@@ -215,6 +220,59 @@ export function QuoteResult({
         </Card>
       )}
     </div>
+  )
+}
+
+function SaveCard({
+  draft,
+  chosen,
+  onSave,
+}: {
+  draft: QuoteDraft
+  chosen: ChosenPrice
+  onSave: (status: SavedQuote['status']) => Promise<void>
+}) {
+  // Lo ya guardado se recuerda por su contenido: al cambiar algo se puede volver a guardar.
+  const signature = JSON.stringify([draft, chosen.price.totalPrice])
+  const [saved, setSaved] = useState<{ signature: string; status: SavedQuote['status'] } | null>(null)
+  const [failed, setFailed] = useState(false)
+  const done = saved?.signature === signature ? saved.status : null
+
+  const save = async (status: SavedQuote['status']) => {
+    try {
+      await onSave(status)
+      setSaved({ signature, status })
+      setFailed(false)
+    } catch {
+      setFailed(true)
+    }
+  }
+
+  return (
+    <Card
+      title="Guardar pedido"
+      description={`Con ${chosen.label}: ${money(chosen.price.totalPrice)}. Guarda los costos de hoy aunque después cambien tus precios.`}
+    >
+      <div className="flex flex-wrap gap-2">
+        <Button variant="primary" onClick={() => void save('sold')} disabled={done !== null}>
+          <CircleCheck size={16} aria-hidden /> Registrar venta
+        </Button>
+        <Button onClick={() => void save('quoted')} disabled={done !== null}>
+          <Save size={16} aria-hidden /> Guardar cotización
+        </Button>
+      </div>
+      <p className="mt-2 min-h-4 text-xs text-muted" role="status">
+        {failed && 'No se pudo guardar. Intenta de nuevo.'}
+        {!failed && done && (
+          <>
+            {done === 'sold' ? 'Venta registrada.' : 'Cotización guardada.'}{' '}
+            <a className="underline" href={ROUTE_HREF.historial}>
+              Ver historial
+            </a>
+          </>
+        )}
+      </p>
+    </Card>
   )
 }
 

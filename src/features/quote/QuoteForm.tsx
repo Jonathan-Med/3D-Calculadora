@@ -38,7 +38,7 @@ export function QuoteForm({ draft, onChange, onReset, settings, filaments, catal
     onChange({ extras: [...draft.extras, { ...extra, key: newExtraKey() }] })
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 space-y-4">
       <Card
         title="Impresión"
         description="Copia estos datos de Bambu Studio después de laminar."

@@ -26,6 +26,7 @@ import { ESTIMATE_NOTES } from '../../domain/defaults'
 import type { EstimableField, ExtraItem, Filament, Settings } from '../../domain/types'
 import { money, plural } from '../../lib/format'
 import { fileToLogo } from '../../lib/image'
+import { BackupCard } from './BackupCard'
 
 interface Props {
   settings: Settings
@@ -53,7 +54,7 @@ export function SettingsPage({ settings, filaments, catalog }: Props) {
       )}
 
       <div className="grid items-start gap-4 lg:grid-cols-2 lg:gap-6">
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <Card title="Impresora">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="sm:col-span-2">
@@ -155,6 +156,8 @@ export function SettingsPage({ settings, filaments, catalog }: Props) {
             </div>
           </Card>
 
+          <BackupCard />
+
           <Card title="Merma y fallos">
             <div className="grid gap-4">
               <SettingNumber
@@ -177,7 +180,7 @@ export function SettingsPage({ settings, filaments, catalog }: Props) {
           </Card>
         </div>
 
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <Card
             title="Repuestos"
             description="Lo que hay que apartar por cada hora impresa para poder comprarlos."

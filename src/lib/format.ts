@@ -21,6 +21,20 @@ const dateLong = new Intl.DateTimeFormat('es-MX', { dateStyle: 'long' })
 /** "16 de noviembre de 2026" */
 export const longDate = (date: Date): string => dateLong.format(date)
 
+const dateShort = new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })
+
+/** "16 nov 2026" */
+export const shortDate = (timestamp: number): string => dateShort.format(new Date(timestamp))
+
+const monthLong = new Intl.DateTimeFormat('es-MX', { month: 'long', year: 'numeric' })
+
+/** "2026-11" → "Noviembre de 2026" */
+export function monthLabel(month: string): string {
+  const [year, monthNumber] = month.split('-').map(Number)
+  const label = monthLong.format(new Date(year, monthNumber - 1, 1))
+  return label.charAt(0).toUpperCase() + label.slice(1)
+}
+
 /** "Llaveros de Ñandú" → "llaveros-de-nandu", para nombres de archivo. */
 export const slug = (text: string): string =>
   text

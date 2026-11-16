@@ -5,7 +5,7 @@ import {
   DEFAULT_FILAMENTS,
   DEFAULT_SETTINGS,
 } from '../domain/defaults'
-import type { ExtraItem, Filament, Settings } from '../domain/types'
+import type { ExtraItem, Filament, SavedQuote, Settings } from '../domain/types'
 
 export const SETTINGS_ID = 'main'
 
@@ -15,6 +15,7 @@ export const db = new Dexie('calculadora-3d') as Dexie & {
   settings: EntityTable<SettingsRow, 'id'>
   filaments: EntityTable<Filament, 'id'>
   extras: EntityTable<ExtraItem, 'id'>
+  quotes: EntityTable<SavedQuote, 'id'>
 }
 
 db.version(1).stores({
@@ -32,6 +33,11 @@ db.version(2).upgrade((tx) =>
       row.business ??= structuredClone(DEFAULT_BUSINESS)
     }),
 )
+
+// v3: historial de pedidos.
+db.version(3).stores({
+  quotes: '++id, createdAt',
+})
 
 // Solo la primera vez: si después se borran todos los filamentos o extras, no reaparecen.
 db.on('populate', (tx) => {

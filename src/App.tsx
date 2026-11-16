@@ -1,13 +1,21 @@
-import { Calculator, Settings as SettingsIcon } from 'lucide-react'
+import { Calculator, History, Settings as SettingsIcon } from 'lucide-react'
 import { Component, useEffect, type ReactNode } from 'react'
-import { useExtras, useFilaments, useSettings } from './db/hooks'
+import { useExtras, useFilaments, useQuotes, useSettings } from './db/hooks'
+import { HistoryPage } from './features/history/HistoryPage'
 import { QuotePage } from './features/quote/QuotePage'
 import { SettingsPage } from './features/settings/SettingsPage'
 import { ROUTE_HREF, useHashRoute, type Route } from './lib/useHashRoute'
 
-const TABS: { route: Route; label: string; icon: ReactNode }[] = [
+/** `short` es la etiqueta para celular, donde no caben tres pestañas con el nombre completo. */
+const TABS: { route: Route; label: string; short?: string; icon: ReactNode }[] = [
   { route: 'cotizar', label: 'Cotizar', icon: <Calculator size={18} aria-hidden /> },
-  { route: 'configuracion', label: 'Configuración', icon: <SettingsIcon size={18} aria-hidden /> },
+  { route: 'historial', label: 'Historial', icon: <History size={18} aria-hidden /> },
+  {
+    route: 'configuracion',
+    label: 'Configuración',
+    short: 'Ajustes',
+    icon: <SettingsIcon size={18} aria-hidden />,
+  },
 ]
 
 export default function App() {
@@ -31,13 +39,21 @@ export default function App() {
                 href={ROUTE_HREF[tab.route]}
                 aria-current={route === tab.route ? 'page' : undefined}
                 className={
-                  'inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-lg px-3 text-sm font-medium ' +
+                  'inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-lg px-2 text-sm font-medium sm:px-3 ' +
                   (route === tab.route
                     ? 'bg-accent-soft text-ink'
                     : 'text-muted hover:bg-surface-2 hover:text-ink')
                 }
               >
-                {tab.icon} {tab.label}
+                {tab.icon}
+                {tab.short ? (
+                  <>
+                    <span className="sm:hidden">{tab.short}</span>
+                    <span className="hidden sm:inline">{tab.label}</span>
+                  </>
+                ) : (
+                  tab.label
+                )}
               </a>
             ))}
           </nav>
@@ -57,16 +73,19 @@ function Pages({ route }: { route: Route }) {
   const settings = useSettings()
   const filaments = useFilaments()
   const catalog = useExtras()
+  const quotes = useQuotes()
 
-  if (!settings || !filaments || !catalog) {
+  if (!settings || !filaments || !catalog || !quotes) {
     return <p className="py-10 text-center text-sm text-muted">Cargando…</p>
   }
 
-  return route === 'configuracion' ? (
-    <SettingsPage settings={settings} filaments={filaments} catalog={catalog} />
-  ) : (
-    <QuotePage settings={settings} filaments={filaments} catalog={catalog} />
-  )
+  if (route === 'configuracion') {
+    return <SettingsPage settings={settings} filaments={filaments} catalog={catalog} />
+  }
+  if (route === 'historial') {
+    return <HistoryPage settings={settings} quotes={quotes} />
+  }
+  return <QuotePage settings={settings} filaments={filaments} catalog={catalog} />
 }
 
 /** Si el navegador no deja abrir la base de datos (modo privado, almacenamiento bloqueado). */

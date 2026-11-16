@@ -1,5 +1,11 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import type { EstimableField, ExtraItem, Filament, Settings } from '../domain/types'
+import type {
+  EstimableField,
+  ExtraItem,
+  Filament,
+  SavedQuote,
+  Settings,
+} from '../domain/types'
 import { db, SETTINGS_ID } from './db'
 
 /** `undefined` mientras carga. */
@@ -28,6 +34,22 @@ export function updateSettings(change: (settings: Settings) => void, confirmed?:
       if (confirmed) row.estimated = row.estimated.filter((field) => field !== confirmed)
     })
 }
+
+/** Del más reciente al más antiguo. */
+export function useQuotes(): SavedQuote[] | undefined {
+  return useLiveQuery(() => db.quotes.orderBy('createdAt').reverse().toArray())
+}
+
+/** Guarda un pedido con la fecha de este momento. */
+export function saveQuote(quote: Omit<SavedQuote, 'id' | 'createdAt' | 'soldAt'>) {
+  const now = Date.now()
+  return db.quotes.add({ ...quote, createdAt: now, soldAt: quote.status === 'sold' ? now : null })
+}
+
+export const setQuoteSold = (id: number, sold: boolean) =>
+  db.quotes.update(id, sold ? { status: 'sold', soldAt: Date.now() } : { status: 'quoted', soldAt: null })
+
+export const removeQuote = (id: number) => db.quotes.delete(id)
 
 export const addFilament = () =>
   db.filaments.add({ name: 'Nuevo filamento', spoolPrice: 0, spoolGrams: 1000 } as Filament)

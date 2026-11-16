@@ -2,11 +2,13 @@ import { useRef } from 'react'
 import { quantityScenarios } from '../../domain/batch'
 import { calculateCost, piecesPerSpool } from '../../domain/cost'
 import { evaluatePrice, suggestPrices } from '../../domain/pricing'
-import type { ExtraItem, Filament, Settings } from '../../domain/types'
+import { saveQuote } from '../../db/hooks'
+import type { ExtraItem, Filament, SavedQuote, Settings } from '../../domain/types'
 import { money } from '../../lib/format'
 import { useLocalStorage } from '../../lib/useLocalStorage'
 import {
   choosePrice,
+  DRAFT_STORAGE_KEY,
   EMPTY_DRAFT,
   pickFilament,
   reviveDraft,
@@ -23,7 +25,7 @@ interface Props {
 }
 
 export function QuotePage({ settings, filaments, catalog }: Props) {
-  const [draft, setDraft] = useLocalStorage<QuoteDraft>('cotizacion-borrador', reviveDraft)
+  const [draft, setDraft] = useLocalStorage<QuoteDraft>(DRAFT_STORAGE_KEY, reviveDraft)
   const resultRef = useRef<HTMLDivElement>(null)
 
   const job = toJobInput(draft, filaments)
@@ -46,6 +48,21 @@ export function QuotePage({ settings, filaments, catalog }: Props) {
   const change = (changes: Partial<QuoteDraft>) =>
     setDraft((previous) => ({ ...previous, ...changes }))
 
+  const save = async (status: SavedQuote['status']) => {
+    if (!chosen) return
+    await saveQuote({
+      status,
+      title: draft.title.trim() || 'Impresión 3D',
+      customer: draft.customer.trim(),
+      pieces: cost.totals.pieces,
+      unitPrice: chosen.price.unitPrice,
+      totalPrice: chosen.price.totalPrice,
+      priceLabel: chosen.label,
+      cost,
+      draft,
+    })
+  }
+
   return (
     <div className="grid items-start gap-4 pb-24 lg:grid-cols-2 lg:gap-6 lg:pb-0">
       <QuoteForm
@@ -57,7 +74,7 @@ export function QuotePage({ settings, filaments, catalog }: Props) {
         catalog={catalog}
       />
 
-      <div ref={resultRef} className="scroll-mt-20">
+      <div ref={resultRef} className="min-w-0 scroll-mt-20">
         <QuoteResult
           cost={cost}
           prices={prices}
@@ -65,6 +82,7 @@ export function QuotePage({ settings, filaments, catalog }: Props) {
           chosen={chosen}
           draft={draft}
           onChange={change}
+          onSave={save}
           scenarios={quantityScenarios(job, settings)}
           spool={spool}
           laborMinutes={laborMinutes}

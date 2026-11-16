@@ -139,6 +139,25 @@ export interface CostBreakdown {
   }
 }
 
+/** Un pedido guardado en el historial, con los costos del momento en que se guardó. */
+export interface SavedQuote {
+  id: number
+  createdAt: number
+  status: 'quoted' | 'sold'
+  /** Cuándo se marcó como vendido; null mientras solo está cotizado. */
+  soldAt: number | null
+  title: string
+  customer: string
+  pieces: number
+  unitPrice: number
+  totalPrice: number
+  /** Nombre del nivel de precio usado, o "Tu precio". */
+  priceLabel: string
+  cost: CostBreakdown
+  /** Lo capturado en Cotizar, para poder reabrirlo. Se valida al leerlo. */
+  draft: unknown
+}
+
 export type PriceVerdict =
   /** No alcanza ni para reponer material, luz y extras. */
   | 'loss'

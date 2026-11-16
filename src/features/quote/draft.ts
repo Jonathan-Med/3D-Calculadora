@@ -32,6 +32,9 @@ export interface QuoteDraft {
   delivery: string
 }
 
+/** Dónde se guarda en el navegador lo capturado en Cotizar. */
+export const DRAFT_STORAGE_KEY = 'cotizacion-borrador'
+
 export const CUSTOM_PRICE = 'custom'
 const DEFAULT_PRICE_CHOICE = 'regular'
 

@@ -1,14 +1,17 @@
 import { useSyncExternalStore } from 'react'
 
-export type Route = 'cotizar' | 'configuracion'
+export type Route = 'cotizar' | 'historial' | 'configuracion'
 
 export const ROUTE_HREF: Record<Route, string> = {
   cotizar: '#/cotizar',
+  historial: '#/historial',
   configuracion: '#/configuracion',
 }
 
+const ROUTES = Object.keys(ROUTE_HREF) as Route[]
+
 const read = (): Route =>
-  window.location.hash === ROUTE_HREF.configuracion ? 'configuracion' : 'cotizar'
+  ROUTES.find((route) => ROUTE_HREF[route] === window.location.hash) ?? 'cotizar'
 
 function subscribe(onChange: () => void): () => void {
   window.addEventListener('hashchange', onChange)
