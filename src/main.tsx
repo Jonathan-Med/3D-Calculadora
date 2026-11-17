@@ -8,11 +8,17 @@ import App from './App.tsx'
 const UPDATE_CHECK_MS = 60 * 60 * 1000
 
 // Cuando se publica una versión nueva, la página se recarga sola. Lo capturado en Cotizar se
-// guarda en el navegador, así que no se pierde.
+// guarda en el navegador, así que no se pierde. Además de cada hora, busca al volver a la app:
+// en el celular suele quedarse abierta en segundo plano, sin recargarse ni correr el reloj.
 registerSW({
   immediate: true,
   onRegisteredSW(_url, registration) {
-    if (registration) setInterval(() => void registration.update(), UPDATE_CHECK_MS)
+    if (!registration) return
+    const check = () => void registration.update().catch(() => {})
+    setInterval(check, UPDATE_CHECK_MS)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') check()
+    })
   },
 })
 

@@ -116,7 +116,9 @@ const settingList = (text: string, key: string): string[] | null => {
  * OrcaSlicer (encabezado), PrusaSlicer (al final) y el tiempo de Cura. Con varios colores, los
  * gramos vienen separados por comas, uno por filamento.
  */
-export function parseGcodeText(text: string): Pick<SlicedPlate, 'seconds' | 'grams' | 'filaments'> {
+export function parseGcodeText(
+  text: string,
+): Pick<SlicedPlate, 'seconds' | 'grams' | 'filaments' | 'pieces'> {
   const time = firstMatch(text, [
     /total estimated time\s*[:=]\s*([\d.dhms ]+)/i,
     /estimated printing time \(normal mode\)\s*[:=]\s*([\d.dhms ]+)/i,
@@ -131,16 +133,35 @@ export function parseGcodeText(text: string): Pick<SlicedPlate, 'seconds' | 'gra
   const gramsList = perFilament ? numberList(perFilament) : []
   const types = settingList(text, 'filament_type') ?? []
   const colors = settingList(text, 'filament_colou?r') ?? []
-  // Solo se confía en tipos y colores si hay uno por cada cifra de gramos.
+  // Bambu Studio solo da gramos de los filamentos que se usan, mientras que tipos y colores
+  // vienen para todos los del proyecto; "; filament: 2,3,4" dice cuáles son (contando desde 1).
+  const usedMatch = text.match(/^;\s*filament:\s*([\d, \t]+)$/m)
+  const used = usedMatch ? numberList(usedMatch[1]).map((number) => number - 1) : null
+  const slotOf = (index: number): number | null =>
+    used && used.length === gramsList.length ? used[index] : index
+  // Sin esa línea, solo se confía en tipos y colores si hay uno por cada cifra de gramos.
+  const pick = (list: string[], index: number): string | undefined => {
+    const slot = slotOf(index)
+    if (slot === null || slot < 0) return undefined
+    return used || list.length === gramsList.length ? list[slot] : undefined
+  }
   const filaments = gramsList
     .map((grams, index) => ({
-      type: types.length === gramsList.length ? (types[index] ?? '') : '',
-      color: colors.length === gramsList.length ? normalizeColor(colors[index]) : '',
+      type: pick(types, index) ?? '',
+      color: normalizeColor(pick(colors, index)),
       grams,
     }))
     .filter((filament) => filament.grams > 0)
 
-  return { seconds, grams: positive(sum(filaments.map((filament) => filament.grams))), filaments }
+  // Bambu Studio y OrcaSlicer marcan cada objeto de la cama con "; OBJECT_ID: 214" en cada capa.
+  const objectIds = new Set([...text.matchAll(/^;\s*OBJECT_ID:\s*(\d+)/gm)].map((match) => match[1]))
+
+  return {
+    seconds,
+    grams: positive(sum(filaments.map((filament) => filament.grams))),
+    filaments,
+    pieces: objectIds.size > 0 ? objectIds.size : null,
+  }
 }
 
 const unzipAsync = (data: Uint8Array, wanted: (name: string) => boolean) =>
@@ -170,10 +191,11 @@ async function readSlicedProject(data: Uint8Array): Promise<SlicerReadResult> {
         const fromGcode = parseGcodeText(decoder.decode(content))
         const plate = plates.find((item) => item.plate === number)
         if (!plate) {
-          plates.push({ plate: number, pieces: null, ...fromGcode })
+          plates.push({ plate: number, ...fromGcode })
           continue
         }
         plate.seconds ??= fromGcode.seconds
+        plate.pieces ??= fromGcode.pieces
         if (plate.grams === null) {
           plate.grams = fromGcode.grams
           plate.filaments = fromGcode.filaments
@@ -201,7 +223,7 @@ export async function readSlicerFile(file: File): Promise<SlicerReadResult> {
 
   const start = await file.slice(0, GCODE_EDGE_BYTES).text()
   const end = file.size > GCODE_EDGE_BYTES ? await file.slice(-GCODE_EDGE_BYTES).text() : ''
-  const plate: SlicedPlate = { plate: 1, pieces: null, ...parseGcodeText(`${start}\n${end}`) }
+  const plate: SlicedPlate = { plate: 1, ...parseGcodeText(`${start}\n${end}`) }
   if (hasData(plate)) return { ok: true, plates: [plate] }
   return { ok: false, error: /\.g(code)?$/i.test(file.name) ? NOTHING_FOUND : NOT_A_SLICER_FILE }
 }

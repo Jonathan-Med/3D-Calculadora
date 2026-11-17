@@ -114,6 +114,7 @@ describe('parseGcodeText', () => {
   it('lee el encabezado de Bambu Studio usando el tiempo total, no solo el del modelo', () => {
     expect(parseGcodeText(BAMBU_HEADER)).toEqual({
       seconds: 5025,
+      pieces: null,
       grams: 15.67,
       filaments: [{ type: '', color: '', grams: 15.67 }],
     })
@@ -128,6 +129,7 @@ G28
 `
     expect(parseGcodeText(text)).toEqual({
       seconds: 3600,
+      pieces: null,
       grams: 3.18,
       filaments: [
         { type: 'PLA', color: '#ffffff', grams: 2.81 },
@@ -136,12 +138,41 @@ G28
     })
   })
 
+  it('empata gramos y colores con la lista de filamentos usados de Bambu Studio', () => {
+    // Recortado de un G-code real de Bambu Studio 02.09: usa los filamentos 2, 3 y 4 de los 4
+    // del proyecto, así que hay 3 cifras de gramos y 4 colores.
+    const text = [
+      '; model printing time: 1h 44m 11s; total estimated time: 1h 51m 27s',
+      '; total filament weight [g] : 2.75,22.98,4.38',
+      '; filament_density: 1.32,1.23,1.26,1.24',
+      '; filament: 2,3,4',
+      '; filament_colour = #4D3324;#161616;#FFFFFF;#F72323',
+      '; filament_type = PLA;PLA;PLA;PLA',
+    ].join('\n')
+    expect(parseGcodeText(text)).toEqual({
+      seconds: 6687,
+      grams: 30.11,
+      pieces: null,
+      filaments: [
+        { type: 'PLA', color: '#161616', grams: 2.75 },
+        { type: 'PLA', color: '#ffffff', grams: 22.98 },
+        { type: 'PLA', color: '#f72323', grams: 4.38 },
+      ],
+    })
+  })
+
+  it('cuenta las piezas por los objetos distintos de la cama', () => {
+    const text = '; OBJECT_ID: 214\nG1 X1\n; OBJECT_ID: 230\nG1 X2\n; OBJECT_ID: 214\n'
+    expect(parseGcodeText(text).pieces).toBe(2)
+  })
+
   it('lee el desglose que PrusaSlicer pone al final', () => {
     const text =
       'G1 X1\n; filament used [g] = 3.20, 1.30\n; total filament used [g] = 4.50\n' +
       '; estimated printing time (normal mode) = 2h 5m 0s\n; filament_colour = #FF8000;#FFFFFF\n'
     expect(parseGcodeText(text)).toEqual({
       seconds: 7500,
+      pieces: null,
       grams: 4.5,
       filaments: [
         { type: '', color: '#ff8000', grams: 3.2 },
@@ -158,6 +189,7 @@ G28
   it('lee el tiempo de Cura aunque no traiga gramos', () => {
     expect(parseGcodeText(';FLAVOR:Marlin\n;TIME:3600\n;Filament used: 1.2m\n')).toEqual({
       seconds: 3600,
+      pieces: null,
       grams: null,
       filaments: [],
     })
