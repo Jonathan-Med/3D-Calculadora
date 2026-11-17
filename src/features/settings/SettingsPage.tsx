@@ -311,12 +311,15 @@ export function SettingsPage({ settings, filaments, catalog }: Props) {
 
           <Card
             title="Niveles de precio"
-            description="Cuánto se le suma al costo real en cada precio sugerido."
+            description="Cada precio sugerido es el costo real más su ganancia, más un cobro por cada hora que imprime la impresora."
           >
             <ul className="space-y-3">
               {settings.priceTiers.map((tier) => (
-                <li key={tier.id} className="grid grid-cols-[minmax(0,1fr)_7rem] items-end gap-2">
-                  <label>
+                <li
+                  key={tier.id}
+                  className="grid grid-cols-2 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_5.5rem_6.5rem]"
+                >
+                  <label className="col-span-2 sm:col-span-1">
                     <MiniLabel>Nombre</MiniLabel>
                     <TextInput
                       value={tier.name}
@@ -341,9 +344,26 @@ export function SettingsPage({ settings, filaments, catalog }: Props) {
                       }
                     />
                   </label>
+                  <label>
+                    <MiniLabel>Por hora</MiniLabel>
+                    <NumberInput
+                      prefix="$"
+                      value={tier.printerHourRate}
+                      onChange={(printerHourRate) =>
+                        void updateSettings((s) => {
+                          const target = s.priceTiers.find((t) => t.id === tier.id)
+                          if (target) target.printerHourRate = printerHourRate
+                        })
+                      }
+                    />
+                  </label>
                 </li>
               ))}
             </ul>
+            <p className="mt-2 text-xs text-muted">
+              El cobro por hora es lo que vale el tiempo de la impresora, aunque tú no estés
+              trabajando: una pieza de 30 minutos a $25 la hora suma $12.50.
+            </p>
             <div className="mt-4 border-t border-line pt-4">
               <NumberField
                 label="Redondear precios hacia arriba a múltiplos de"

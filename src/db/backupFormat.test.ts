@@ -77,6 +77,21 @@ describe('parseBackup', () => {
     expect(parsed?.settings.laborRatePerHour).toBe(80)
   })
 
+  it('da cobro por hora de impresora a los niveles de respaldos anteriores', () => {
+    const old = fromFile(backup) as { settings: { priceTiers: Record<string, unknown>[] } }
+    old.settings.priceTiers = [
+      ...old.settings.priceTiers.map((tier) => {
+        const { printerHourRate, ...withoutRate } = tier
+        expect(printerHourRate).toBeTypeOf('number')
+        return { ...withoutRate, markupPercent: 60 }
+      }),
+      { id: 'propio', name: 'Mayoreo', description: '', markupPercent: 20 },
+    ]
+    const tiers = parseBackup(old)?.settings.priceTiers
+    expect(tiers?.map((tier) => tier.printerHourRate)).toEqual([10, 25, 42.5, 0])
+    expect(tiers?.every((tier) => tier.markupPercent === 60 || tier.id === 'propio')).toBe(true)
+  })
+
   it('acepta un respaldo sin pedidos', () => {
     expect(parseBackup({ ...backup, quotes: [] })?.quotes).toEqual([])
   })

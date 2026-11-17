@@ -4,6 +4,7 @@ import {
   DEFAULT_EXTRAS,
   DEFAULT_FILAMENTS,
   DEFAULT_SETTINGS,
+  withPrinterHourRate,
 } from '../domain/defaults'
 import type { ExtraItem, Filament, SavedQuote, Settings } from '../domain/types'
 
@@ -38,6 +39,16 @@ db.version(2).upgrade((tx) =>
 db.version(3).stores({
   quotes: '++id, createdAt',
 })
+
+// v4: cobro por hora de impresora en cada nivel de precio.
+db.version(4).upgrade((tx) =>
+  tx
+    .table<SettingsRow, string>('settings')
+    .toCollection()
+    .modify((row) => {
+      row.priceTiers = withPrinterHourRate(row.priceTiers)
+    }),
+)
 
 // Solo la primera vez: si después se borran todos los filamentos o extras, no reaparecen.
 db.on('populate', (tx) => {

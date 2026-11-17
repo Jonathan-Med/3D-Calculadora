@@ -39,6 +39,8 @@ export interface PriceTier {
   description: string
   /** Ganancia sobre el costo real, en %. 50 = costo real × 1.5. */
   markupPercent: number
+  /** Lo que se cobra, además, por cada hora que la impresora trabaja en la pieza. */
+  printerHourRate: number
 }
 
 /** Valores de configuración que todavía son una estimación y no un dato real. */

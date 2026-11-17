@@ -30,10 +30,18 @@ export function evaluatePrice(cost: CostBreakdown, totalPrice: number): PriceEva
   }
 }
 
-/** Un precio sugerido por cada nivel configurado, redondeado por pieza. */
+const positive = (value: number): number => (Number.isFinite(value) && value > 0 ? value : 0)
+
+/**
+ * Un precio sugerido por cada nivel configurado, redondeado por pieza: el costo real más su
+ * ganancia, más el cobro por cada hora que la impresora tarda en la pieza.
+ */
 export function suggestPrices(cost: CostBreakdown, settings: Settings): SuggestedPrice[] {
+  const hoursPerPiece = cost.totals.hours / cost.totals.pieces
   return settings.priceTiers.map((tier) => {
-    const rawUnitPrice = cost.perPiece.totalCost * (1 + tier.markupPercent / 100)
+    const rawUnitPrice =
+      cost.perPiece.totalCost * (1 + positive(tier.markupPercent) / 100) +
+      positive(tier.printerHourRate) * hoursPerPiece
     const unitPrice = roundUpTo(rawUnitPrice, settings.roundTo)
     return { tier, ...evaluatePrice(cost, unitPrice * cost.totals.pieces) }
   })

@@ -1,4 +1,4 @@
-import { DEFAULT_BUSINESS, DEFAULT_SETTINGS } from '../domain/defaults'
+import { DEFAULT_BUSINESS, DEFAULT_SETTINGS, withPrinterHourRate } from '../domain/defaults'
 import type { ExtraItem, Filament, SavedQuote, Settings } from '../domain/types'
 
 export const BACKUP_APP = 'calculadora-3d'
@@ -62,6 +62,7 @@ export function parseBackup(raw: unknown): Backup | null {
       ...DEFAULT_SETTINGS,
       ...partial,
       business: { ...DEFAULT_BUSINESS, ...(isObject(settings.business) ? settings.business : {}) },
+      priceTiers: withPrinterHourRate(partial.priceTiers ?? DEFAULT_SETTINGS.priceTiers),
     },
     filaments: filaments as unknown as Filament[],
     extras: extras as unknown as ExtraItem[],

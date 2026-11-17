@@ -1,4 +1,11 @@
-import type { BusinessProfile, EstimableField, ExtraItem, Filament, Settings } from './types'
+import type {
+  BusinessProfile,
+  EstimableField,
+  ExtraItem,
+  Filament,
+  PriceTier,
+  Settings,
+} from './types'
 
 /**
  * Valores de arranque para una Bambu Lab A1 mini recién comprada.
@@ -29,24 +36,28 @@ export const DEFAULT_SETTINGS: Settings = {
   laborRatePerHour: 60,
   wastePercent: 5,
   failurePercent: 5,
+  // El cobro por hora de impresora arranca con los montos de la calculadora de 3DKoneko.
   priceTiers: [
     {
       id: 'friend',
       name: 'Precio Amigo',
       description: 'Casi regalado, pero con dignidad.',
       markupPercent: 10,
+      printerHourRate: 10,
     },
     {
       id: 'regular',
       name: 'Precio Regular',
       description: 'Precio base, sin regateo ni drama.',
       markupPercent: 50,
+      printerHourRate: 25,
     },
     {
       id: 'premium',
       name: 'Precio NLQHPSLPLI',
       description: 'No lo quiero hacer, pero si lo pagan lo imprimo.',
       markupPercent: 150,
+      printerHourRate: 42.5,
     },
   ],
   // Con piezas de $10 a $20, redondear a múltiplos de $5 infla demasiado el precio.
@@ -66,6 +77,20 @@ export const DEFAULT_SETTINGS: Settings = {
 export const DEFAULT_FILAMENTS: Filament[] = [
   { id: 1, name: 'PLA 1 kg', spoolPrice: 350, spoolGrams: 1000 },
 ]
+
+/**
+ * Completa niveles guardados por versiones anteriores, que no tenían cobro por hora de
+ * impresora: toman el de fábrica de su nivel, o 0 si es un nivel desconocido.
+ */
+export function withPrinterHourRate(tiers: PriceTier[]): PriceTier[] {
+  return tiers.map((tier) => ({
+    ...tier,
+    printerHourRate:
+      typeof tier.printerHourRate === 'number'
+        ? tier.printerHourRate
+        : (DEFAULT_SETTINGS.priceTiers.find((known) => known.id === tier.id)?.printerHourRate ?? 0),
+  }))
+}
 
 /** Ejemplos con precios aproximados; se editan en Configuración. */
 export const DEFAULT_EXTRAS: ExtraItem[] = [

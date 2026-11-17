@@ -86,7 +86,12 @@ describe('evaluatePrice', () => {
 })
 
 describe('suggestPrices', () => {
-  const prices = suggestPrices(cost, settings)
+  // Sin cobro por hora, para revisar solo la ganancia sobre el costo.
+  const markupOnly: Settings = {
+    ...settings,
+    priceTiers: settings.priceTiers.map((tier) => ({ ...tier, printerHourRate: 0 })),
+  }
+  const prices = suggestPrices(cost, markupOnly)
 
   it('da un precio por nivel, redondeado por pieza', () => {
     // Costo real por pieza 28.44 → +10 % = 31.28, +50 % = 42.66, +150 % = 71.10
@@ -100,7 +105,48 @@ describe('suggestPrices', () => {
   })
 
   it('respeta la configuración sin redondeo', () => {
-    const exact = suggestPrices(cost, { ...settings, roundTo: 0 })
+    const exact = suggestPrices(cost, { ...markupOnly, roundTo: 0 })
     expect(exact[1].unitPrice).toBeCloseTo(42.66)
+  })
+
+  it('suma el cobro por hora de impresora según lo que tarda cada pieza', () => {
+    // 8 piezas en 8 horas: 1 hora por pieza. Regular: 42.66 + 25 = 67.66 → 70.
+    const withRate = suggestPrices(cost, { ...settings, roundTo: 0 })
+    expect(withRate.map((price) => price.unitPrice)).toEqual([
+      expect.closeTo(31.28 + 10, 2),
+      expect.closeTo(42.66 + 25, 2),
+      expect.closeTo(71.1 + 42.5, 2),
+    ])
+    expect(suggestPrices(cost, settings)[1].unitPrice).toBe(70)
+  })
+
+  it('trata un cobro por hora vacío como cero', () => {
+    const empty = suggestPrices(cost, {
+      ...markupOnly,
+      priceTiers: markupOnly.priceTiers.map((tier) => ({ ...tier, printerHourRate: NaN })),
+    })
+    expect(empty.map((price) => price.unitPrice)).toEqual([35, 45, 75])
+  })
+})
+
+describe('caso real: osito de 6.76 g, 30 min y 3 por cama, filamento a $300', () => {
+  const bear = calculateCost(
+    {
+      gramsPerPlate: 6.76,
+      hoursPerPlate: 0.5,
+      piecesPerPlate: 3,
+      quantity: 3,
+      filament: { spoolPrice: 300, spoolGrams: 1000 },
+      laborMinutesPerOrder: 0,
+      laborMinutesPerPiece: 0,
+      extras: [],
+    },
+    DEFAULT_SETTINGS,
+  )
+
+  it('cobra parecido a 3DKoneko por la cama completa (10.48, 19.19 y 30.62)', () => {
+    const prices = suggestPrices(bear, DEFAULT_SETTINGS)
+    expect(prices.map((price) => price.unitPrice)).toEqual([3, 6, 10])
+    expect(prices.map((price) => price.totalPrice)).toEqual([9, 18, 30])
   })
 })

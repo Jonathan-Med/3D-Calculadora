@@ -97,7 +97,7 @@ export function QuoteResult({
 
       <Card
         title="Cuánto cobrar"
-        description="Sugerencias sobre el costo real. Elige el que va en la cotización del cliente."
+        description="Costo real más ganancia y el cobro por hora de impresora. Elige el que va en la cotización del cliente."
       >
         <ul className="space-y-2">
           {prices.map((price) => {

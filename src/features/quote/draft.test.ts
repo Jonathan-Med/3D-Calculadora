@@ -55,7 +55,7 @@ describe('choosePrice', () => {
   })
   const tier = (id: string, unitPrice: number): SuggestedPrice => ({
     ...evaluation(unitPrice),
-    tier: { id, name: id, description: '', markupPercent: 0 },
+    tier: { id, name: id, description: '', markupPercent: 0, printerHourRate: 0 },
   })
   const prices = [tier('friend', 12), tier('regular', 16), tier('premium', 26)]
 
