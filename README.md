@@ -6,7 +6,8 @@ precio es rentable y cuánto cobrar. También calcula lotes, piezas por rollo y 
 de cotización para mandarle al cliente.
 
 Funciona entera en el navegador: no hay servidor ni cuentas, y los datos se guardan solo en el
-dispositivo donde se usa.
+dispositivo donde se usa. Se puede instalar como app en el celular o la PC (desde el menú del
+navegador, "Instalar" o "Agregar a pantalla de inicio") y abre sin internet.
 
 ## Desarrollo
 
@@ -17,6 +18,7 @@ npm install
 npm run dev      # servidor local
 npm test         # pruebas del motor de costos
 npm run build    # versión para publicar, en dist/
+npm run icons    # regenera los íconos de la app a partir de public/favicon.svg
 ```
 
 En PowerShell con la ejecución de scripts deshabilitada, usa `npm.cmd` en lugar de `npm`.
@@ -25,7 +27,7 @@ En PowerShell con la ejecución de scripts deshabilitada, usa `npm.cmd` en lugar
 
 - `src/domain/`: el motor de costos y precios. Funciones puras, con pruebas.
 - `src/db/`: lo único que toca el almacenamiento del navegador (IndexedDB con Dexie).
-- `src/features/`: las pantallas (Cotizar y Configuración).
+- `src/features/`: las pantallas (Cotizar, Historial y Configuración).
 - `src/components/` y `src/lib/`: componentes de interfaz y utilidades compartidas.
 
 ## Publicación
