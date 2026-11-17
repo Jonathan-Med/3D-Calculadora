@@ -4,7 +4,7 @@ Calculadora de costos y precios para impresión 3D. Dice cuánto cuesta realment
 (material, luz, desgaste de la impresora, repuestos, fallos, extras y mano de obra), desde qué
 precio es rentable y cuánto cobrar. Toma el tiempo, los gramos y las piezas del archivo laminado
 (.gcode.3mf de Bambu Studio u OrcaSlicer, o un .gcode). También calcula lotes, piezas por rollo y genera una imagen
-de cotización para mandarle al cliente.
+de cotización para mandarle al cliente, con una o varias piezas, sus colores y medidas.
 
 Funciona entera en el navegador: no hay servidor ni cuentas, y los datos se guardan solo en el
 dispositivo donde se usa. Se puede instalar como app en el celular o la PC (desde el menú del

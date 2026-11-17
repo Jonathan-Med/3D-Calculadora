@@ -163,6 +163,16 @@ export interface CostBreakdown {
 }
 
 /** Un pedido guardado en el historial, con los costos del momento en que se guardó. */
+/** Una pieza de un pedido guardado, como se le cotizó al cliente. */
+export interface SavedQuoteItem {
+  name: string
+  colors: string
+  measurements: string
+  quantity: number
+  unitPrice: number
+  totalPrice: number
+}
+
 export interface SavedQuote {
   id: number
   createdAt: number
@@ -176,7 +186,10 @@ export interface SavedQuote {
   totalPrice: number
   /** Nombre del nivel de precio usado, o "Tu precio". */
   priceLabel: string
+  /** Costos de todas las piezas juntas. */
   cost: CostBreakdown
+  /** Las piezas del pedido; los pedidos de versiones anteriores no lo tienen. */
+  items?: SavedQuoteItem[]
   /** Lo capturado en Cotizar, para poder reabrirlo. Se valida al leerlo. */
   draft: unknown
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calculateCost, machineHourlyRates, piecesPerSpool } from './cost'
+import { calculateCost, machineHourlyRates, piecesPerSpool, sumCosts } from './cost'
 import { DEFAULT_FILAMENTS, DEFAULT_SETTINGS } from './defaults'
 import type { JobInput, Settings } from './types'
 
@@ -162,6 +162,24 @@ describe('calculateCost', () => {
     expect(keychains.labor).toBeCloseTo(33)
     expect(keychains.totalCost).toBeCloseTo(92.59575)
     expect(keychains.perPiece.totalCost).toBeCloseTo(10.2884, 3)
+  })
+})
+
+describe('sumCosts', () => {
+  it('junta piezas de un pedido y recalcula el costo por pieza', () => {
+    const a = calculateCost(job, settings)
+    const b = calculateCost({ ...job, quantity: 4 }, settings)
+    const both = sumCosts([a, b])
+    expect(both.totalCost).toBeCloseTo(a.totalCost + b.totalCost)
+    expect(both.machineReserve).toBeCloseTo(a.machineReserve + b.machineReserve)
+    expect(both.totals.pieces).toBe(12)
+    expect(both.totals.plates).toBe(a.totals.plates + b.totals.plates)
+    expect(both.perPiece.totalCost).toBeCloseTo((a.totalCost + b.totalCost) / 12)
+    expect(both.materialLines).toHaveLength(2)
+  })
+
+  it('no se rompe sin piezas', () => {
+    expect(sumCosts([]).perPiece.totalCost).toBe(0)
   })
 })
 

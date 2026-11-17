@@ -234,6 +234,11 @@ function QuoteRow({ quote }: { quote: SavedQuote }) {
             {shortDate(sold && quote.soldAt ? quote.soldAt : quote.createdAt)} ·{' '}
             {plural(quote.pieces, 'pieza', 'piezas')}
           </p>
+          {quote.items && quote.items.length > 1 && (
+            <p className="mt-0.5 text-xs text-muted">
+              {quote.items.map((item) => `${item.name} × ${item.quantity}`).join(' · ')}
+            </p>
+          )}
         </div>
         <div className="shrink-0 text-right">
           <p className="text-lg font-semibold tabular-nums">{money(quote.totalPrice)}</p>

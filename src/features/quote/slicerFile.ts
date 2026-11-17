@@ -1,5 +1,6 @@
 import { unzip, type Unzipped } from 'fflate'
 import type { Filament } from '../../domain/types'
+import { colorName, joinNames } from '../../lib/colorName'
 import { newRowKey, type DraftMaterial, type QuoteDraft } from './draft'
 
 /** Un filamento usado en la cama: uno por color. */
@@ -262,6 +263,9 @@ export function plateToDraft(
         color: filament.color,
       }),
     )
+    // Para la cotización del cliente: "negro, blanco y rojo", que se puede corregir a mano.
+    const names = joinNames(plate.filaments.map((filament) => colorName(filament.color)))
+    if (names) changes.colors = names
   } else if (plate.grams !== null) {
     changes.materials = [
       { key: newRowKey(), filamentId: currentFilamentId, grams: twoDecimals(plate.grams), color: '' },

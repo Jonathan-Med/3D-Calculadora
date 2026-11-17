@@ -1,6 +1,6 @@
-import { CircleCheck, CircleX, Save, TriangleAlert } from 'lucide-react'
+import { CircleCheck, CircleX, FilePen, Plus, RotateCcw, Save, Trash2, TriangleAlert } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
-import { Button, Card, NumberField } from '../../components/ui'
+import { Button, Card, IconButton, NumberField } from '../../components/ui'
 import type { QuantityScenario } from '../../domain/batch'
 import type {
   CostBreakdown,
@@ -14,6 +14,7 @@ import { duration, grams, money, percent, plural } from '../../lib/format'
 import { ROUTE_HREF } from '../../lib/useHashRoute'
 import { ClientQuoteCard } from './ClientQuote'
 import { CUSTOM_PRICE, type ChosenPrice, type QuoteDraft } from './draft'
+import { lineName, orderTotals, type OrderLine } from './order'
 
 interface Props {
   cost: CostBreakdown
@@ -29,6 +30,12 @@ interface Props {
   spools: { pieces: number; name: string; color?: string }[]
   laborMinutes: number
   settings: Settings
+  /** Todas las piezas de la cotización, incluida la que está en captura si ya tiene precio. */
+  lines: OrderLine[]
+  onAddPiece: () => void
+  onEditItem: (key: string) => void
+  onRemoveItem: (key: string) => void
+  onNewQuote: () => void
 }
 
 export function QuoteResult({
@@ -43,144 +50,163 @@ export function QuoteResult({
   spools,
   laborMinutes,
   settings,
+  lines,
+  onAddPiece,
+  onEditItem,
+  onRemoveItem,
+  onNewQuote,
 }: Props) {
-  if (cost.totalCost === 0) {
-    return (
-      <Card title="Resultado">
-        <p className="text-sm text-muted">
-          Captura los gramos y el tiempo de la impresión para ver cuánto te cuesta y cuánto cobrar.
-        </p>
-      </Card>
-    )
-  }
-
+  const hasPiece = cost.totalCost > 0
   const several = cost.totals.pieces > 1
   const estimated = settings.estimated.length
 
   return (
     <div className="space-y-4">
-      <Card title="Cuánto te cuesta">
-        <div className="grid grid-cols-2 gap-3">
-          <Floor
-            label="Sale de tu bolsa"
-            unit={cost.perPiece.cashCost}
-            total={several ? cost.cashCost : null}
-            note="Material, luz y extras. Si cobras menos, pones dinero."
-          />
-          <Floor
-            label="Costo real"
-            unit={cost.perPiece.totalCost}
-            total={several ? cost.totalCost : null}
-            note="Suma impresora, repuestos y tu tiempo. Desde aquí es rentable."
-            emphasized
-          />
-        </div>
-
-        <h3 className="mt-5 text-sm font-semibold">
-          En qué se va{several && ` (pedido de ${cost.totals.pieces} piezas)`}
-        </h3>
-        <Breakdown cost={cost} laborMinutes={laborMinutes} settings={settings} />
-
-        <p className="mt-4 text-xs text-muted">
-          {plural(cost.totals.plates, 'cama', 'camas')} · {duration(cost.totals.hours)} de impresión ·{' '}
-          {grams(cost.totals.grams)} de filamento
-        </p>
-        {estimated > 0 && (
-          <p className="mt-2 text-xs text-muted">
-            Este cálculo usa {plural(estimated, 'valor estimado', 'valores estimados')}.{' '}
-            <a className="underline" href={ROUTE_HREF.configuracion}>
-              Revisar en Configuración
-            </a>
+      {!hasPiece && (
+        <Card title={draft.items.length > 0 ? 'Siguiente pieza' : 'Resultado'}>
+          <p className="text-sm text-muted">
+            Captura los gramos y el tiempo de la impresión para ver cuánto te cuesta y cuánto cobrar.
           </p>
-        )}
-      </Card>
+        </Card>
+      )}
 
-      <Card
-        title="Cuánto cobrar"
-        description="Costo real más ganancia y el cobro por hora de impresora. Elige el que va en la cotización del cliente."
-      >
-        <ul className="space-y-2">
-          {prices.map((price) => {
-            const selected = chosen?.id === price.tier.id
-            return (
-              <li key={price.tier.id}>
-                <label
-                  className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 ${selected ? 'border-accent bg-accent-soft' : 'border-line'}`}
-                >
-                  <input
-                    type="radio"
-                    name="precio-cotizacion"
-                    className="mt-1 size-4 shrink-0 accent-accent"
-                    checked={selected}
-                    onChange={() => onChange({ priceChoice: price.tier.id })}
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block font-medium">{price.tier.name}</span>
-                    <span className="block text-xs text-muted">{price.tier.description}</span>
-                    <span className="mt-1.5 block text-xs text-muted">
-                      Ganancia {money(price.profit)} + {money(cost.labor)} de tu tiempo
-                    </span>
-                  </span>
-                  <span className="shrink-0 text-right">
-                    <span className="block text-xl font-semibold tabular-nums">
-                      {money(price.unitPrice)}
-                    </span>
-                    {several && (
-                      <span className="block text-xs text-muted tabular-nums">
-                        c/u · total {money(price.totalPrice)}
+      {hasPiece && (
+        <>
+          <Card title="Cuánto te cuesta">
+            <div className="grid grid-cols-2 gap-3">
+              <Floor
+                label="Sale de tu bolsa"
+                unit={cost.perPiece.cashCost}
+                total={several ? cost.cashCost : null}
+                note="Material, luz y extras. Si cobras menos, pones dinero."
+              />
+              <Floor
+                label="Costo real"
+                unit={cost.perPiece.totalCost}
+                total={several ? cost.totalCost : null}
+                note="Suma impresora, repuestos y tu tiempo. Desde aquí es rentable."
+                emphasized
+              />
+            </div>
+
+            <h3 className="mt-5 text-sm font-semibold">
+              En qué se va{several && ` (pedido de ${cost.totals.pieces} piezas)`}
+            </h3>
+            <Breakdown cost={cost} laborMinutes={laborMinutes} settings={settings} />
+
+            <p className="mt-4 text-xs text-muted">
+              {plural(cost.totals.plates, 'cama', 'camas')} · {duration(cost.totals.hours)} de impresión ·{' '}
+              {grams(cost.totals.grams)} de filamento
+            </p>
+            {estimated > 0 && (
+              <p className="mt-2 text-xs text-muted">
+                Este cálculo usa {plural(estimated, 'valor estimado', 'valores estimados')}.{' '}
+                <a className="underline" href={ROUTE_HREF.configuracion}>
+                  Revisar en Configuración
+                </a>
+              </p>
+            )}
+          </Card>
+
+          <Card
+            title="Cuánto cobrar"
+            description="Costo real más ganancia y el cobro por hora de impresora. Elige el que va en la cotización del cliente."
+          >
+            <ul className="space-y-2">
+              {prices.map((price) => {
+                const selected = chosen?.id === price.tier.id
+                return (
+                  <li key={price.tier.id}>
+                    <label
+                      className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 ${selected ? 'border-accent bg-accent-soft' : 'border-line'}`}
+                    >
+                      <input
+                        type="radio"
+                        name="precio-cotizacion"
+                        className="mt-1 size-4 shrink-0 accent-accent"
+                        checked={selected}
+                        onChange={() => onChange({ priceChoice: price.tier.id })}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-medium">{price.tier.name}</span>
+                        <span className="block text-xs text-muted">{price.tier.description}</span>
+                        <span className="mt-1.5 block text-xs text-muted">
+                          Ganancia {money(price.profit)} + {money(cost.labor)} de tu tiempo
+                        </span>
                       </span>
-                    )}
-                  </span>
-                </label>
-              </li>
-            )
-          })}
-        </ul>
+                      <span className="shrink-0 text-right">
+                        <span className="block text-xl font-semibold tabular-nums">
+                          {money(price.unitPrice)}
+                        </span>
+                        {several && (
+                          <span className="block text-xs text-muted tabular-nums">
+                            c/u · total {money(price.totalPrice)}
+                          </span>
+                        )}
+                      </span>
+                    </label>
+                  </li>
+                )
+              })}
+            </ul>
 
-        <div className="mt-5 border-t border-line pt-4">
-          <NumberField
-            label={several ? '¿Y si cobro otro precio por pieza?' : '¿Y si cobro otro precio?'}
-            prefix="$"
-            value={draft.customUnitPrice}
-            onChange={(customUnitPrice) =>
-              onChange(
-                customUnitPrice > 0
-                  ? { customUnitPrice, priceChoice: CUSTOM_PRICE }
-                  : { customUnitPrice },
-              )
-            }
-          />
-          {customPrice && (
-            <>
-              <Verdict price={customPrice} cost={cost} />
-              <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm">
-                <input
-                  type="radio"
-                  name="precio-cotizacion"
-                  className="size-4 accent-accent"
-                  checked={chosen?.id === CUSTOM_PRICE}
-                  onChange={() => onChange({ priceChoice: CUSTOM_PRICE })}
-                />
-                Usar este precio en la cotización del cliente
-              </label>
-            </>
-          )}
-        </div>
-      </Card>
+            <div className="mt-5 border-t border-line pt-4">
+              <NumberField
+                label={several ? '¿Y si cobro otro precio por pieza?' : '¿Y si cobro otro precio?'}
+                prefix="$"
+                value={draft.customUnitPrice}
+                onChange={(customUnitPrice) =>
+                  onChange(
+                    customUnitPrice > 0
+                      ? { customUnitPrice, priceChoice: CUSTOM_PRICE }
+                      : { customUnitPrice },
+                  )
+                }
+              />
+              {customPrice && (
+                <>
+                  <Verdict price={customPrice} cost={cost} />
+                  <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm">
+                    <input
+                      type="radio"
+                      name="precio-cotizacion"
+                      className="size-4 accent-accent"
+                      checked={chosen?.id === CUSTOM_PRICE}
+                      onChange={() => onChange({ priceChoice: CUSTOM_PRICE })}
+                    />
+                    Usar este precio en la cotización del cliente
+                  </label>
+                </>
+              )}
+            </div>
+          </Card>
 
-      {chosen && (
+        </>
+      )}
+
+      {lines.length > 0 && (
+        <OrderCard
+          draft={draft}
+          lines={lines}
+          onAddPiece={onAddPiece}
+          onEditItem={onEditItem}
+          onRemoveItem={onRemoveItem}
+          onNewQuote={onNewQuote}
+        />
+      )}
+
+      {lines.length > 0 && (
         <ClientQuoteCard
           draft={draft}
           onChange={onChange}
-          chosen={chosen}
-          pieces={cost.totals.pieces}
+          lines={lines}
           business={settings.business}
         />
       )}
 
-      {chosen && <SaveCard draft={draft} chosen={chosen} onSave={onSave} />}
+      {lines.length > 0 && <SaveCard draft={draft} lines={lines} onSave={onSave} />}
 
-      {spools.length > 0 && (
+      {hasPiece && spools.length > 0 && (
         <Card title="Lotes y rollo">
           <ul className="space-y-1 text-sm">
             {spools.map((spool, index) => (
@@ -233,17 +259,118 @@ export function QuoteResult({
   )
 }
 
+/** Las piezas de la cotización y el botón para agregar la que está en captura y seguir con otra. */
+function OrderCard({
+  draft,
+  lines,
+  onAddPiece,
+  onEditItem,
+  onRemoveItem,
+  onNewQuote,
+}: {
+  draft: QuoteDraft
+  lines: OrderLine[]
+  onAddPiece: () => void
+  onEditItem: (key: string) => void
+  onRemoveItem: (key: string) => void
+  onNewQuote: () => void
+}) {
+  const [confirming, setConfirming] = useState(false)
+  const { pieces, totalPrice } = orderTotals(lines)
+  const current = lines.find((line) => line.current)
+
+  return (
+    <Card
+      title="Piezas de la cotización"
+      description="¿El cliente quiere más de un modelo? Agrega esta pieza y captura la siguiente."
+    >
+      <ul className="divide-y divide-line">
+        {lines.map((line, index) => (
+          <li key={line.key} className="flex items-start gap-3 py-2.5 first:pt-0">
+            <div className="min-w-0 flex-1">
+              <p className="flex items-center gap-1.5 text-sm font-medium">
+                {line.swatches.map((color) => (
+                  <Swatch key={color} color={color} />
+                ))}
+                <span className="truncate">{lineName(line, index, lines.length, draft.title)}</span>
+              </p>
+              <p className="text-xs text-muted tabular-nums">
+                {line.quantity} × {money(line.unitPrice)} · {line.priceLabel}
+                {line.current && ' · en captura'}
+              </p>
+            </div>
+            <span className="shrink-0 text-sm font-semibold tabular-nums">{money(line.totalPrice)}</span>
+            {!line.current && (
+              <div className="-my-1 flex shrink-0">
+                <IconButton label={`Editar ${line.name || `pieza ${index + 1}`}`} onClick={() => onEditItem(line.key)}>
+                  <FilePen size={16} aria-hidden />
+                </IconButton>
+                <IconButton label={`Quitar ${line.name || `pieza ${index + 1}`}`} onClick={() => onRemoveItem(line.key)}>
+                  <Trash2 size={16} aria-hidden />
+                </IconButton>
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+
+      {lines.length > 1 && (
+        <p className="mt-1 flex justify-between border-t border-line pt-2.5 text-sm font-semibold tabular-nums">
+          <span>Total · {plural(pieces, 'pieza', 'piezas')}</span>
+          <span>{money(totalPrice)}</span>
+        </p>
+      )}
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {current && (
+          <Button variant="primary" onClick={onAddPiece}>
+            <Plus size={16} aria-hidden /> Agregar y cotizar otra pieza
+          </Button>
+        )}
+        {draft.items.length > 0 &&
+          (confirming ? (
+            <span className="flex flex-wrap items-center gap-2 text-sm">
+              ¿Borrar todas las piezas?
+              <Button
+                onClick={() => {
+                  onNewQuote()
+                  setConfirming(false)
+                }}
+              >
+                Sí, empezar otra
+              </Button>
+              <Button variant="ghost" onClick={() => setConfirming(false)}>
+                Cancelar
+              </Button>
+            </span>
+          ) : (
+            <Button variant="ghost" onClick={() => setConfirming(true)}>
+              <RotateCcw size={16} aria-hidden /> Cotización nueva
+            </Button>
+          ))}
+      </div>
+      {draft.items.length > 0 && current === undefined && (
+        <p className="mt-2 text-xs text-muted">
+          La siguiente pieza se suma aquí en cuanto captures sus gramos y su tiempo.
+        </p>
+      )}
+    </Card>
+  )
+}
+
 function SaveCard({
   draft,
-  chosen,
+  lines,
   onSave,
 }: {
   draft: QuoteDraft
-  chosen: ChosenPrice
+  lines: OrderLine[]
   onSave: (status: SavedQuote['status']) => Promise<void>
 }) {
+  const { totalPrice } = orderTotals(lines)
+  const labels = [...new Set(lines.map((line) => line.priceLabel))]
   // Lo ya guardado se recuerda por su contenido: al cambiar algo se puede volver a guardar.
-  const signature = JSON.stringify([draft, chosen.price.totalPrice])
+  const signature = JSON.stringify([draft, totalPrice])
   const [saved, setSaved] = useState<{ signature: string; status: SavedQuote['status'] } | null>(null)
   const [failed, setFailed] = useState(false)
   const done = saved?.signature === signature ? saved.status : null
@@ -261,7 +388,7 @@ function SaveCard({
   return (
     <Card
       title="Guardar pedido"
-      description={`Con ${chosen.label}: ${money(chosen.price.totalPrice)}. Guarda los costos de hoy aunque después cambien tus precios.`}
+      description={`${lines.length > 1 ? `${lines.length} piezas, ` : ''}${labels.length === 1 ? `con ${labels[0]}` : 'con varios precios'}: ${money(totalPrice)}. Guarda los costos de hoy aunque después cambien tus precios.`}
     >
       <div className="flex flex-wrap gap-2">
         <Button variant="primary" onClick={() => void save('sold')} disabled={done !== null}>

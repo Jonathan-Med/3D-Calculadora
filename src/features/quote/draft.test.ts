@@ -105,6 +105,33 @@ describe('reviveDraft', () => {
     expect(revived.extras).toEqual([])
   })
 
+  it('un borrador de antes queda sin piezas agregadas y sin datos para el cliente', () => {
+    const revived = reviveDraft({ gramsPerPlate: 50, title: 'Llaveros' })
+    expect(revived.items).toEqual([])
+    expect([revived.name, revived.colors, revived.measurements]).toEqual(['', '', ''])
+    expect(revived.title).toBe('Llaveros')
+  })
+
+  it('conserva las piezas agregadas válidas y descarta las dañadas', () => {
+    const item = {
+      key: 'x',
+      name: 'Osito',
+      colors: 'blanco',
+      swatches: ['#ffffff', 'no-es-color'],
+      measurements: '2 cm',
+      quantity: 3,
+      unitPrice: 6,
+      totalPrice: 18,
+      priceLabel: 'Precio Regular',
+      cost: { totalCost: 3.38, totals: { pieces: 3 } },
+      piece: { name: 'Osito', quantity: 3 },
+    }
+    const revived = reviveDraft({ items: [item, { name: 'sin precio' }, 'x'] })
+    expect(revived.items).toHaveLength(1)
+    expect(revived.items[0]).toMatchObject({ name: 'Osito', swatches: ['#ffffff'], totalPrice: 18 })
+    expect(revived.items[0].piece).toMatchObject({ name: 'Osito', quantity: 3, piecesPerPlate: 1 })
+  })
+
   it('repara colores inválidos y deja siempre al menos un filamento', () => {
     expect(reviveDraft({ materials: [{ grams: 5, color: 'rojo' }, 'x'] }).materials).toEqual([
       { key: expect.any(String), filamentId: null, grams: 5, color: '' },

@@ -100,3 +100,38 @@ export function piecesPerSpool(
   const gramsWithWaste = positive(gramsPerPiece) * (1 + positive(wastePercent) / 100)
   return Math.floor(divide(filament.spoolGrams, gramsWithWaste))
 }
+
+/**
+ * Junta los costos de varias piezas de un mismo pedido en uno solo, para guardarlo en el
+ * historial y sumarlo a las ganancias como cualquier otra venta.
+ */
+export function sumCosts(costs: CostBreakdown[]): CostBreakdown {
+  const add = (pick: (cost: CostBreakdown) => number) =>
+    costs.reduce((sum, cost) => sum + pick(cost), 0)
+  const pieces = add((cost) => cost.totals.pieces)
+  const cashCost = add((cost) => cost.cashCost)
+  const totalCost = add((cost) => cost.totalCost)
+  return {
+    material: add((cost) => cost.material),
+    materialLines: costs.flatMap((cost) => cost.materialLines ?? []),
+    electricity: add((cost) => cost.electricity),
+    depreciation: add((cost) => cost.depreciation),
+    maintenance: add((cost) => cost.maintenance),
+    failures: add((cost) => cost.failures),
+    extras: add((cost) => cost.extras),
+    labor: add((cost) => cost.labor),
+    cashCost,
+    machineReserve: add((cost) => cost.machineReserve),
+    totalCost,
+    perPiece: {
+      cashCost: pieces > 0 ? cashCost / pieces : 0,
+      totalCost: pieces > 0 ? totalCost / pieces : 0,
+    },
+    totals: {
+      grams: add((cost) => cost.totals.grams),
+      hours: add((cost) => cost.totals.hours),
+      plates: add((cost) => cost.totals.plates),
+      pieces,
+    },
+  }
+}

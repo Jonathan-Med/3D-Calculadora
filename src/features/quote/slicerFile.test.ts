@@ -315,6 +315,7 @@ describe('plateToDraft', () => {
       { filamentId: 1, grams: 2.5, color: '#ffffff' },
       { filamentId: 2, grams: 1.5, color: '#000000' },
     ])
+    expect(plateToDraft(plate, catalog, 1).colors).toBe('blanco y negro')
   })
 
   it('no toca lo que el archivo no traía', () => {

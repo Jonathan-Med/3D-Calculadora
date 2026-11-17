@@ -7,6 +7,7 @@ import {
   NumberField,
   NumberInput,
   Select,
+  TextField,
   TextInput,
 } from '../../components/ui'
 import type { ExtraItem, Filament, Settings } from '../../domain/types'
@@ -49,6 +50,34 @@ export function QuoteForm({ draft, onChange, onReset, settings, filaments, catal
 
   return (
     <div className="min-w-0 space-y-4">
+      <Card
+        title={draft.items.length > 0 ? `Pieza ${draft.items.length + 1}` : 'Pieza'}
+        description="Lo que verá el cliente de esta pieza en su cotización."
+      >
+        <div className="grid grid-cols-2 gap-4">
+          <div className="col-span-2">
+            <TextField
+              label="Nombre"
+              placeholder="Osito"
+              value={draft.name}
+              onChange={(name) => onChange({ name })}
+            />
+          </div>
+          <TextField
+            label="Colores"
+            placeholder="Blanco y rojo"
+            value={draft.colors}
+            onChange={(colors) => onChange({ colors })}
+          />
+          <TextField
+            label="Medidas"
+            placeholder="5 × 3 × 2 cm"
+            value={draft.measurements}
+            onChange={(measurements) => onChange({ measurements })}
+          />
+        </div>
+      </Card>
+
       <Card
         title="Impresión"
         description="Sube el archivo laminado de Bambu Studio o copia sus datos a mano."
