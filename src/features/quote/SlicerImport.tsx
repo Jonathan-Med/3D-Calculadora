@@ -56,9 +56,10 @@ export function SlicerImport({ onChange }: { onChange: (changes: Partial<QuoteDr
         }
       >
         <FileUp size={16} aria-hidden /> {reading ? 'Leyendo…' : 'Leer archivo del slicer'}
+        {/* Sin `accept`: los celulares no reconocen .gcode ni .3mf y los dejan grises. El tipo
+            se revisa al leerlo. */}
         <input
           type="file"
-          accept=".3mf,.gcode,.gco,.g"
           className="sr-only"
           disabled={reading}
           onChange={(event) => {
