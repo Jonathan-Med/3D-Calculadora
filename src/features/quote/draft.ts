@@ -11,10 +11,20 @@ export interface DraftExtra extends JobExtra {
   key: string
 }
 
+/** Un filamento de la cama: uno por color. */
+export interface DraftMaterial {
+  key: string
+  filamentId: number | null
+  /** Gramos de este filamento en toda la cama. */
+  grams: number
+  /** Color que marcó el slicer (#RRGGBB); vacío si se capturó a mano. */
+  color: string
+}
+
 /** Lo que hay capturado en la pantalla Cotizar. */
 export interface QuoteDraft {
-  filamentId: number | null
-  gramsPerPlate: number
+  /** Siempre al menos uno. */
+  materials: DraftMaterial[]
   hours: number
   minutes: number
   piecesPerPlate: number
@@ -38,9 +48,15 @@ export const DRAFT_STORAGE_KEY = 'cotizacion-borrador'
 export const CUSTOM_PRICE = 'custom'
 const DEFAULT_PRICE_CHOICE = 'regular'
 
+export const emptyMaterial = (filamentId: number | null = null): DraftMaterial => ({
+  key: newRowKey(),
+  filamentId,
+  grams: 0,
+  color: '',
+})
+
 export const EMPTY_DRAFT: QuoteDraft = {
-  filamentId: null,
-  gramsPerPlate: 0,
+  materials: [{ key: 'material-1', filamentId: null, grams: 0, color: '' }],
   hours: 0,
   minutes: 0,
   piecesPerPlate: 1,
@@ -55,7 +71,7 @@ export const EMPTY_DRAFT: QuoteDraft = {
   delivery: '',
 }
 
-export const newExtraKey = (): string => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+export const newRowKey = (): string => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
 const numberOr = (value: unknown, fallback: number): number =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : fallback
@@ -67,7 +83,7 @@ function reviveExtra(stored: unknown): DraftExtra | null {
   if (typeof stored !== 'object' || stored === null) return null
   const extra = stored as Record<string, unknown>
   return {
-    key: typeof extra.key === 'string' ? extra.key : newExtraKey(),
+    key: typeof extra.key === 'string' ? extra.key : newRowKey(),
     name: typeof extra.name === 'string' ? extra.name : '',
     unitCost: numberOr(extra.unitCost, 0),
     quantity: numberOr(extra.quantity, 1),
@@ -75,13 +91,39 @@ function reviveExtra(stored: unknown): DraftExtra | null {
   }
 }
 
+const HEX_COLOR = /^#[0-9a-f]{6}$/i
+
+function reviveMaterial(stored: unknown): DraftMaterial | null {
+  if (typeof stored !== 'object' || stored === null) return null
+  const material = stored as Record<string, unknown>
+  return {
+    key: typeof material.key === 'string' ? material.key : newRowKey(),
+    filamentId: typeof material.filamentId === 'number' ? material.filamentId : null,
+    grams: numberOr(material.grams, 0),
+    color: typeof material.color === 'string' && HEX_COLOR.test(material.color) ? material.color : '',
+  }
+}
+
 /** Convierte lo guardado en el navegador en un borrador válido, venga como venga. */
 export function reviveDraft(stored: unknown): QuoteDraft {
   if (typeof stored !== 'object' || stored === null) return EMPTY_DRAFT
   const draft = stored as Record<string, unknown>
+  const materials = Array.isArray(draft.materials)
+    ? draft.materials.map(reviveMaterial).filter((material) => material !== null)
+    : []
   return {
-    filamentId: typeof draft.filamentId === 'number' ? draft.filamentId : null,
-    gramsPerPlate: numberOr(draft.gramsPerPlate, 0),
+    // Las versiones anteriores guardaban un solo filamento en filamentId y gramsPerPlate.
+    materials:
+      materials.length > 0
+        ? materials
+        : [
+            {
+              key: newRowKey(),
+              filamentId: typeof draft.filamentId === 'number' ? draft.filamentId : null,
+              grams: numberOr(draft.gramsPerPlate, 0),
+              color: '',
+            },
+          ],
     hours: numberOr(draft.hours, 0),
     minutes: numberOr(draft.minutes, 0),
     piecesPerPlate: numberOr(draft.piecesPerPlate, 1),
@@ -125,18 +167,24 @@ export function choosePrice(
 }
 
 /** El filamento elegido o, si ya no existe, el primero de la lista. */
-export function pickFilament(draft: QuoteDraft, filaments: Filament[]): Filament | undefined {
-  return filaments.find((filament) => filament.id === draft.filamentId) ?? filaments[0]
+export function pickFilament(filamentId: number | null, filaments: Filament[]): Filament | undefined {
+  return filaments.find((filament) => filament.id === filamentId) ?? filaments[0]
 }
 
 export function toJobInput(draft: QuoteDraft, filaments: Filament[]): JobInput {
-  const filament = pickFilament(draft, filaments)
   return {
-    gramsPerPlate: draft.gramsPerPlate,
+    materials: draft.materials.map((material) => {
+      const filament = pickFilament(material.filamentId, filaments)
+      return {
+        label: filament?.name ?? 'Filamento',
+        ...(material.color ? { color: material.color } : {}),
+        gramsPerPlate: material.grams,
+        filament: filament ?? { spoolPrice: 0, spoolGrams: 0 },
+      }
+    }),
     hoursPerPlate: draft.hours + draft.minutes / 60,
     piecesPerPlate: draft.piecesPerPlate,
     quantity: draft.quantity,
-    filament: filament ?? { spoolPrice: 0, spoolGrams: 0 },
     laborMinutesPerOrder: draft.laborMinutesPerOrder,
     laborMinutesPerPiece: draft.laborMinutesPerPiece,
     extras: draft.extras,

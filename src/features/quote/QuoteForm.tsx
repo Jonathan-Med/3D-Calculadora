@@ -1,9 +1,7 @@
 import { Plus, RotateCcw, Trash2 } from 'lucide-react'
-import { useId } from 'react'
 import {
   Button,
   Card,
-  Field,
   IconButton,
   MiniLabel,
   NumberField,
@@ -12,9 +10,16 @@ import {
   TextInput,
 } from '../../components/ui'
 import type { ExtraItem, Filament, Settings } from '../../domain/types'
-import { money } from '../../lib/format'
+import { grams, money } from '../../lib/format'
 import { ROUTE_HREF } from '../../lib/useHashRoute'
-import { newExtraKey, pickFilament, type DraftExtra, type QuoteDraft } from './draft'
+import {
+  emptyMaterial,
+  newRowKey,
+  pickFilament,
+  type DraftExtra,
+  type DraftMaterial,
+  type QuoteDraft,
+} from './draft'
 import { SlicerImport } from './SlicerImport'
 
 interface Props {
@@ -27,8 +32,12 @@ interface Props {
 }
 
 export function QuoteForm({ draft, onChange, onReset, settings, filaments, catalog }: Props) {
-  const filamentId = useId()
-  const filament = pickFilament(draft, filaments)
+  const changeMaterial = (key: string, changes: Partial<DraftMaterial>) =>
+    onChange({
+      materials: draft.materials.map((material) =>
+        material.key === key ? { ...material, ...changes } : material,
+      ),
+    })
 
   const changeExtra = (key: string, changes: Partial<DraftExtra>) =>
     onChange({
@@ -36,7 +45,7 @@ export function QuoteForm({ draft, onChange, onReset, settings, filaments, catal
     })
 
   const addExtra = (extra: Omit<DraftExtra, 'key'>) =>
-    onChange({ extras: [...draft.extras, { ...extra, key: newExtraKey() }] })
+    onChange({ extras: [...draft.extras, { ...extra, key: newRowKey() }] })
 
   return (
     <div className="min-w-0 space-y-4">
@@ -51,47 +60,19 @@ export function QuoteForm({ draft, onChange, onReset, settings, filaments, catal
       >
         <div className="grid grid-cols-2 gap-4">
           <div className="col-span-2">
-            <SlicerImport onChange={onChange} />
+            <SlicerImport
+              onChange={onChange}
+              filaments={filaments}
+              currentFilamentId={pickFilament(draft.materials[0]?.filamentId ?? null, filaments)?.id ?? null}
+            />
           </div>
 
           <div className="col-span-2">
-            <Field
-              label="Filamento"
-              htmlFor={filamentId}
-              hint={
-                filaments.length === 0 ? (
-                  <>
-                    No hay filamentos. Agrega uno en{' '}
-                    <a className="underline" href={ROUTE_HREF.configuracion}>
-                      Configuración
-                    </a>
-                    .
-                  </>
-                ) : undefined
-              }
-            >
-              <Select
-                id={filamentId}
-                value={filament?.id ?? ''}
-                onChange={(event) => onChange({ filamentId: Number(event.target.value) })}
-                disabled={filaments.length === 0}
-              >
-                {filaments.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.name} · {money(option.spoolPrice)}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          </div>
-
-          <div className="col-span-2">
-            <NumberField
-              label="Filamento de la cama"
-              suffix="g"
-              value={draft.gramsPerPlate}
-              onChange={(gramsPerPlate) => onChange({ gramsPerPlate })}
-              hint="El total que marca el slicer para toda la cama, con soportes."
+            <MaterialRows
+              materials={draft.materials}
+              filaments={filaments}
+              onChangeMaterial={changeMaterial}
+              onChange={onChange}
             />
           </div>
 
@@ -224,5 +205,105 @@ export function QuoteForm({ draft, onChange, onReset, settings, filaments, catal
         </div>
       </Card>
     </div>
+  )
+}
+
+/** Filamento y gramos de la cama: un renglón por color. */
+function MaterialRows({
+  materials,
+  filaments,
+  onChangeMaterial,
+  onChange,
+}: {
+  materials: DraftMaterial[]
+  filaments: Filament[]
+  onChangeMaterial: (key: string, changes: Partial<DraftMaterial>) => void
+  onChange: (changes: Partial<QuoteDraft>) => void
+}) {
+  const several = materials.length > 1
+  const showColors = materials.some((material) => material.color)
+  const total = materials.reduce((sum, material) => sum + material.grams, 0)
+
+  return (
+    <fieldset className="min-w-0">
+      <legend className="mb-1.5 text-sm font-medium">Filamento de la cama</legend>
+      <ul className="space-y-2">
+        {materials.map((material, index) => {
+          const filament = pickFilament(material.filamentId, filaments)
+          const name = several ? `color ${index + 1}` : 'la cama'
+          return (
+            <li key={material.key} className="flex items-center gap-2">
+              {showColors && (
+                <span
+                  className="size-5 shrink-0 rounded-full border border-line"
+                  style={{ background: material.color || 'transparent' }}
+                  title={material.color || 'Sin color'}
+                  aria-hidden
+                />
+              )}
+              <Select
+                aria-label={`Filamento de ${name}`}
+                className="min-w-0 flex-1"
+                value={filament?.id ?? ''}
+                onChange={(event) =>
+                  onChangeMaterial(material.key, { filamentId: Number(event.target.value) })
+                }
+                disabled={filaments.length === 0}
+              >
+                {filaments.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name} · {money(option.spoolPrice)}
+                  </option>
+                ))}
+              </Select>
+              <div className="w-28 shrink-0">
+                <NumberInput
+                  aria-label={`Gramos de ${name}`}
+                  suffix="g"
+                  value={material.grams}
+                  onChange={(value) => onChangeMaterial(material.key, { grams: value })}
+                />
+              </div>
+              {several && (
+                <IconButton
+                  label={`Quitar ${name}`}
+                  onClick={() =>
+                    onChange({ materials: materials.filter((item) => item.key !== material.key) })
+                  }
+                >
+                  <Trash2 size={18} aria-hidden />
+                </IconButton>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <Button
+          variant="ghost"
+          onClick={() =>
+            onChange({
+              materials: [...materials, emptyMaterial(materials.at(-1)?.filamentId ?? null)],
+            })
+          }
+        >
+          <Plus size={16} aria-hidden /> Otro color
+        </Button>
+        {several && <span className="text-sm text-muted tabular-nums">Total {grams(total)}</span>}
+      </div>
+      <p className="mt-1 text-xs text-muted">
+        {filaments.length === 0 ? (
+          <>
+            No hay filamentos. Agrega uno en{' '}
+            <a className="underline" href={ROUTE_HREF.configuracion}>
+              Configuración
+            </a>
+            .
+          </>
+        ) : (
+          'Lo que marca el slicer para toda la cama, con soportes. Si imprimes en varios colores, un renglón por color.'
+        )}
+      </p>
+    </fieldset>
   )
 }

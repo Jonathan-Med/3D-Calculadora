@@ -5,11 +5,10 @@ import { BACKUP_APP, parseBackup, type Backup } from './backupFormat'
 
 const cost = calculateCost(
   {
-    gramsPerPlate: 90,
     hoursPerPlate: 3,
     piecesPerPlate: 9,
     quantity: 9,
-    filament: DEFAULT_FILAMENTS[0],
+    materials: [{ label: 'PLA', gramsPerPlate: 90, filament: DEFAULT_FILAMENTS[0] }],
     laborMinutesPerOrder: 15,
     laborMinutesPerPiece: 2,
     extras: [],

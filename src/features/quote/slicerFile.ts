@@ -1,16 +1,27 @@
 import { unzip, type Unzipped } from 'fflate'
-import type { QuoteDraft } from './draft'
+import type { Filament } from '../../domain/types'
+import { newRowKey, type DraftMaterial, type QuoteDraft } from './draft'
 
-/** Lo que se pudo leer de una cama laminada. Lo que el archivo no trae queda en null. */
+/** Un filamento usado en la cama: uno por color. */
+export interface SlicedFilament {
+  /** Tipo que dice el slicer, por ejemplo "PLA"; vacío si no lo dice. */
+  type: string
+  /** #RRGGBB; vacío si no lo dice. */
+  color: string
+  grams: number
+}
+
+/** Lo que se pudo leer de una cama laminada. Lo que el archivo no trae queda en null o vacío. */
 export interface SlicedPlate {
   /** Número de cama en el slicer (1, 2…). */
   plate: number
   seconds: number | null
+  /** Gramos de toda la cama, sumando todos los colores. */
   grams: number | null
   /** Objetos en la cama, que normalmente son las piezas. */
   pieces: number | null
-  /** Tipos de filamento usados, por ejemplo "PLA". */
-  materials: string[]
+  /** Desglose por filamento; vacío si el archivo solo da el total. */
+  filaments: SlicedFilament[]
 }
 
 export type SlicerReadResult = { ok: true; plates: SlicedPlate[] } | { ok: false; error: string }
@@ -23,6 +34,14 @@ const NOTHING_FOUND = 'El archivo no dice cuánto tarda ni cuánto filamento usa
 
 const positive = (value: number): number | null => (Number.isFinite(value) && value > 0 ? value : null)
 
+const sum = (values: number[]): number => values.reduce((total, value) => total + value, 0)
+
+/** "#FFFFFFFF" o "#ffffff" → "#ffffff"; cualquier otra cosa → "". */
+const normalizeColor = (text: string | undefined): string => {
+  const match = text?.trim().match(/^#([0-9a-f]{6})/i)
+  return match ? `#${match[1].toLowerCase()}` : ''
+}
+
 const attributes = (tag: string): Record<string, string> => {
   const found: Record<string, string> = {}
   for (const [, key, value] of tag.matchAll(/([\w:-]+)="([^"]*)"/g)) found[key] = value
@@ -31,7 +50,7 @@ const attributes = (tag: string): Record<string, string> => {
 
 /**
  * Lee `Metadata/slice_info.config` de un .gcode.3mf de Bambu Studio u OrcaSlicer: trae, por
- * cama, el tiempo estimado en segundos, los gramos y los objetos.
+ * cama, el tiempo estimado en segundos, los gramos de cada filamento y los objetos.
  */
 export function parseSliceInfo(xml: string): SlicedPlate[] {
   const plates: SlicedPlate[] = []
@@ -44,15 +63,22 @@ export function parseSliceInfo(xml: string): SlicedPlate[] {
     const objects = [...body.matchAll(/<object\b[^>]*>/g)].filter(
       ([tag]) => attributes(tag).skipped !== 'true',
     )
-    const filaments = [...body.matchAll(/<filament\b[^>]*>/g)].map(([tag]) => attributes(tag))
-    const filamentGrams = filaments.reduce((sum, filament) => sum + (Number(filament.used_g) || 0), 0)
+    const filaments = [...body.matchAll(/<filament\b[^>]*>/g)]
+      .map(([tag]) => attributes(tag))
+      .map((filament) => ({
+        type: filament.type ?? '',
+        color: normalizeColor(filament.color),
+        grams: Number(filament.used_g) || 0,
+      }))
+      .filter((filament) => filament.grams > 0)
 
     plates.push({
       plate: Number(meta.index) || plates.length + 1,
       seconds: positive(Number(meta.prediction)),
-      grams: positive(Number(meta.weight)) ?? positive(filamentGrams),
+      // Con desglose, el total es su suma para que todo cuadre.
+      grams: positive(sum(filaments.map((filament) => filament.grams))) ?? positive(Number(meta.weight)),
       pieces: objects.length > 0 ? objects.length : null,
-      materials: [...new Set(filaments.map((filament) => filament.type).filter(Boolean))],
+      filaments,
     })
   }
   return plates
@@ -76,11 +102,21 @@ const firstMatch = (text: string, patterns: RegExp[]): string | null => {
   return null
 }
 
+/** "2.81,0.37" o "3.20, 1.30" → [2.81, 0.37]. */
+const numberList = (text: string): number[] => text.split(',').map((part) => Number(part.trim()) || 0)
+
+/** "PLA;PETG" → ["PLA", "PETG"]. */
+const settingList = (text: string, key: string): string[] | null => {
+  const match = text.match(new RegExp(`^;\\s*${key}\\s*=\\s*(.*)$`, 'm'))
+  return match ? match[1].split(';').map((part) => part.trim()) : null
+}
+
 /**
  * Lee el tiempo y los gramos de los comentarios de un G-code. Entiende los de Bambu Studio y
- * OrcaSlicer (encabezado), PrusaSlicer (al final) y el tiempo de Cura.
+ * OrcaSlicer (encabezado), PrusaSlicer (al final) y el tiempo de Cura. Con varios colores, los
+ * gramos vienen separados por comas, uno por filamento.
  */
-export function parseGcodeText(text: string): Pick<SlicedPlate, 'seconds' | 'grams'> {
+export function parseGcodeText(text: string): Pick<SlicedPlate, 'seconds' | 'grams' | 'filaments'> {
   const time = firstMatch(text, [
     /total estimated time\s*[:=]\s*([\d.dhms ]+)/i,
     /estimated printing time \(normal mode\)\s*[:=]\s*([\d.dhms ]+)/i,
@@ -88,19 +124,23 @@ export function parseGcodeText(text: string): Pick<SlicedPlate, 'seconds' | 'gra
   const curaSeconds = text.match(/^;TIME:(\d+)/m)
   const seconds = time ? parseDuration(time) : curaSeconds ? positive(Number(curaSeconds[1])) : null
 
-  const total = firstMatch(text, [
-    /total filament weight \[g\]\s*[:=]\s*([\d.]+)/i,
-    /total filament used \[g\]\s*[:=]\s*([\d.]+)/i,
+  const perFilament = firstMatch(text, [
+    /total filament weight \[g\]\s*[:=]\s*([\d., \t]+)/i, // Bambu Studio y OrcaSlicer
+    /^;\s*filament used \[g\]\s*=\s*([\d., \t]+)/im, // PrusaSlicer y OrcaSlicer
   ])
-  // Con varios filamentos PrusaSlicer pone "filament used [g] = 1.20, 3.40".
-  const perFilament = text.match(/filament used \[g\]\s*[:=]\s*([\d.,\s]+)/i)
-  const grams = total
-    ? positive(Number(total))
-    : perFilament
-      ? positive(perFilament[1].split(',').reduce((sum, part) => sum + (Number(part) || 0), 0))
-      : null
+  const gramsList = perFilament ? numberList(perFilament) : []
+  const types = settingList(text, 'filament_type') ?? []
+  const colors = settingList(text, 'filament_colou?r') ?? []
+  // Solo se confía en tipos y colores si hay uno por cada cifra de gramos.
+  const filaments = gramsList
+    .map((grams, index) => ({
+      type: types.length === gramsList.length ? (types[index] ?? '') : '',
+      color: colors.length === gramsList.length ? normalizeColor(colors[index]) : '',
+      grams,
+    }))
+    .filter((filament) => filament.grams > 0)
 
-  return { seconds, grams }
+  return { seconds, grams: positive(sum(filaments.map((filament) => filament.grams))), filaments }
 }
 
 const unzipAsync = (data: Uint8Array, wanted: (name: string) => boolean) =>
@@ -112,33 +152,36 @@ const unzipAsync = (data: Uint8Array, wanted: (name: string) => boolean) =>
 
 const decoder = new TextDecoder()
 const hasData = (plate: SlicedPlate) => plate.seconds !== null || plate.grams !== null
+const isComplete = (plate: SlicedPlate) => plate.seconds !== null && plate.grams !== null
+const SLICE_INFO = 'Metadata/slice_info.config'
+const PLATE_GCODE = /^Metadata\/plate_(\d+)\.gcode$/
 
 async function readSlicedProject(data: Uint8Array): Promise<SlicerReadResult> {
-  let files: Unzipped
+  let plates: SlicedPlate[]
   try {
-    files = await unzipAsync(
-      data,
-      (name) => name === 'Metadata/slice_info.config' || /^Metadata\/plate_\d+\.gcode$/.test(name),
-    )
+    const info = (await unzipAsync(data, (name) => name === SLICE_INFO))[SLICE_INFO]
+    plates = info ? parseSliceInfo(decoder.decode(info)) : []
+
+    // El G-code de cada cama pesa mucho: solo se abre si slice_info no trae tiempo y gramos.
+    if (plates.length === 0 || !plates.every(isComplete)) {
+      const gcodes = await unzipAsync(data, (name) => PLATE_GCODE.test(name))
+      for (const [name, content] of Object.entries(gcodes)) {
+        const number = Number(name.match(PLATE_GCODE)?.[1])
+        const fromGcode = parseGcodeText(decoder.decode(content))
+        const plate = plates.find((item) => item.plate === number)
+        if (!plate) {
+          plates.push({ plate: number, pieces: null, ...fromGcode })
+          continue
+        }
+        plate.seconds ??= fromGcode.seconds
+        if (plate.grams === null) {
+          plate.grams = fromGcode.grams
+          plate.filaments = fromGcode.filaments
+        }
+      }
+    }
   } catch {
     return { ok: false, error: NOT_A_SLICER_FILE }
-  }
-
-  const info = files['Metadata/slice_info.config']
-  let plates = info ? parseSliceInfo(decoder.decode(info)) : []
-
-  // Si slice_info no trae el tiempo o los gramos, se buscan en el G-code de cada cama.
-  for (const [name, content] of Object.entries(files)) {
-    const number = Number(name.match(/plate_(\d+)\.gcode$/)?.[1])
-    if (!number) continue
-    const fromGcode = parseGcodeText(decoder.decode(content))
-    const plate = plates.find((item) => item.plate === number)
-    if (plate) {
-      plate.seconds ??= fromGcode.seconds
-      plate.grams ??= fromGcode.grams
-    } else {
-      plates.push({ plate: number, pieces: null, materials: [], ...fromGcode })
-    }
   }
 
   plates = plates.filter(hasData).sort((a, b) => a.plate - b.plate)
@@ -157,17 +200,51 @@ export async function readSlicerFile(file: File): Promise<SlicerReadResult> {
   if (/\.(3mf|zip)$/i.test(file.name)) return { ok: false, error: NOT_A_SLICER_FILE }
 
   const start = await file.slice(0, GCODE_EDGE_BYTES).text()
-  const end =
-    file.size > GCODE_EDGE_BYTES ? await file.slice(-GCODE_EDGE_BYTES).text() : ''
-  const plate: SlicedPlate = { plate: 1, pieces: null, materials: [], ...parseGcodeText(`${start}\n${end}`) }
+  const end = file.size > GCODE_EDGE_BYTES ? await file.slice(-GCODE_EDGE_BYTES).text() : ''
+  const plate: SlicedPlate = { plate: 1, pieces: null, ...parseGcodeText(`${start}\n${end}`) }
   if (hasData(plate)) return { ok: true, plates: [plate] }
   return { ok: false, error: /\.g(code)?$/i.test(file.name) ? NOTHING_FOUND : NOT_A_SLICER_FILE }
 }
 
+/**
+ * El filamento de Configuración para un tipo del slicer: el que ya estaba elegido si su nombre
+ * menciona ese tipo, si no el primero que lo mencione, y si ninguno, el que ya estaba elegido.
+ */
+export function matchFilament(
+  type: string,
+  filaments: Filament[],
+  current: number | null,
+): number | null {
+  const mentions = (filament: Filament) =>
+    type !== '' && filament.name.toLowerCase().includes(type.toLowerCase())
+  const selected = filaments.find((filament) => filament.id === current)
+  if (selected && mentions(selected)) return selected.id
+  return filaments.find(mentions)?.id ?? current
+}
+
+const twoDecimals = (value: number) => Math.round(value * 100) / 100
+
 /** Los cambios al borrador al elegir una cama: solo lo que el archivo sí traía. */
-export function plateToDraft(plate: SlicedPlate): Partial<QuoteDraft> {
+export function plateToDraft(
+  plate: SlicedPlate,
+  filaments: Filament[] = [],
+  currentFilamentId: number | null = null,
+): Partial<QuoteDraft> {
   const changes: Partial<QuoteDraft> = {}
-  if (plate.grams !== null) changes.gramsPerPlate = Math.round(plate.grams * 100) / 100
+  if (plate.filaments.length > 0) {
+    changes.materials = plate.filaments.map(
+      (filament): DraftMaterial => ({
+        key: newRowKey(),
+        filamentId: matchFilament(filament.type, filaments, currentFilamentId),
+        grams: twoDecimals(filament.grams),
+        color: filament.color,
+      }),
+    )
+  } else if (plate.grams !== null) {
+    changes.materials = [
+      { key: newRowKey(), filamentId: currentFilamentId, grams: twoDecimals(plate.grams), color: '' },
+    ]
+  }
   if (plate.seconds !== null) {
     const minutes = Math.round(plate.seconds / 60)
     changes.hours = Math.floor(minutes / 60)

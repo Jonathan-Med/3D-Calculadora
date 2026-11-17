@@ -1,4 +1,4 @@
-import type { CostBreakdown, Filament, JobInput, Settings } from './types'
+import type { CostBreakdown, Filament, JobInput, MaterialLine, Settings } from './types'
 
 /** Un campo vacío o inválido de un formulario cuenta como 0 en vez de romper el cálculo. */
 const positive = (value: number): number => (Number.isFinite(value) && value > 0 ? value : 0)
@@ -32,13 +32,22 @@ export function calculateCost(job: JobInput, settings: Settings): CostBreakdown 
 
   // Una cama incompleta gasta en proporción a las piezas que lleva.
   const hours = divide(job.hoursPerPlate, piecesPerPlate) * pieces
-  const grams =
-    divide(job.gramsPerPlate, piecesPerPlate) * pieces * (1 + positive(settings.wastePercent) / 100)
+  const waste = 1 + positive(settings.wastePercent) / 100
+  const materialLines: MaterialLine[] = job.materials.map((item) => {
+    const grams = divide(item.gramsPerPlate, piecesPerPlate) * pieces * waste
+    return {
+      label: item.label,
+      ...(item.color ? { color: item.color } : {}),
+      grams,
+      cost: grams * divide(item.filament.spoolPrice, item.filament.spoolGrams),
+    }
+  })
+  const grams = materialLines.reduce((sum, line) => sum + line.grams, 0)
 
   const rates = machineHourlyRates(settings)
   const failureRate = positive(settings.failurePercent) / 100
 
-  const material = grams * divide(job.filament.spoolPrice, job.filament.spoolGrams)
+  const material = materialLines.reduce((sum, line) => sum + line.cost, 0)
   const electricity = hours * rates.electricity
   const depreciation = hours * rates.depreciation
   const maintenance = hours * rates.maintenance
@@ -59,6 +68,7 @@ export function calculateCost(job: JobInput, settings: Settings): CostBreakdown 
 
   return {
     material,
+    materialLines,
     electricity,
     depreciation,
     maintenance,

@@ -1,30 +1,42 @@
 import { FileUp } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '../../components/ui'
+import type { Filament } from '../../domain/types'
 import { duration, grams, plural } from '../../lib/format'
 import type { QuoteDraft } from './draft'
 import { plateToDraft, readSlicerFile, type SlicedPlate } from './slicerFile'
 
-/** "1 h 24 min · 16 g · 2 piezas · PLA" */
+/** "1 h 24 min · 16 g en 2 colores · 2 piezas · PLA, PETG" */
 function describePlate(plate: SlicedPlate): string {
+  const colors = plate.filaments.length
+  const types = [...new Set(plate.filaments.map((filament) => filament.type).filter(Boolean))]
   return [
     plate.seconds !== null && duration(plate.seconds / 3600),
-    plate.grams !== null && grams(plate.grams),
+    plate.grams !== null && `${grams(plate.grams)}${colors > 1 ? ` en ${colors} colores` : ''}`,
     plate.pieces !== null && plural(plate.pieces, 'pieza', 'piezas'),
-    plate.materials.join(', '),
+    types.join(', '),
   ]
     .filter(Boolean)
     .join(' · ')
 }
 
 /** Llena tiempo, gramos y piezas con el archivo laminado, para no copiarlos a mano. */
-export function SlicerImport({ onChange }: { onChange: (changes: Partial<QuoteDraft>) => void }) {
+export function SlicerImport({
+  onChange,
+  filaments,
+  currentFilamentId,
+}: {
+  onChange: (changes: Partial<QuoteDraft>) => void
+  filaments: Filament[]
+  /** El filamento que ya estaba elegido: se usa para los colores cuyo tipo no se reconoce. */
+  currentFilamentId: number | null
+}) {
   const [reading, setReading] = useState(false)
   const [choices, setChoices] = useState<{ fileName: string; plates: SlicedPlate[] } | null>(null)
   const [message, setMessage] = useState('')
 
   const apply = (fileName: string, plate: SlicedPlate, plateCount: number) => {
-    onChange(plateToDraft(plate))
+    onChange(plateToDraft(plate, filaments, currentFilamentId))
     setChoices(null)
     const which = plateCount > 1 ? `la cama ${plate.plate} de ` : ''
     setMessage(`Se leyó ${which}${fileName}: ${describePlate(plate)}. Revisa que todo cuadre.`)

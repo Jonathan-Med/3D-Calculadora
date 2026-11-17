@@ -16,11 +16,10 @@ const settings: Settings = {
 }
 
 const job: JobInput = {
-  gramsPerPlate: 100,
   hoursPerPlate: 4,
   piecesPerPlate: 4,
   quantity: 8,
-  filament: { spoolPrice: 400, spoolGrams: 1000 },
+  materials: [{ label: 'PLA', gramsPerPlate: 100, filament: { spoolPrice: 400, spoolGrams: 1000 } }],
   laborMinutesPerOrder: 30,
   laborMinutesPerPiece: 5,
   extras: [
@@ -132,11 +131,10 @@ describe('suggestPrices', () => {
 describe('caso real: osito de 6.76 g, 30 min y 3 por cama, filamento a $300', () => {
   const bear = calculateCost(
     {
-      gramsPerPlate: 6.76,
       hoursPerPlate: 0.5,
       piecesPerPlate: 3,
       quantity: 3,
-      filament: { spoolPrice: 300, spoolGrams: 1000 },
+      materials: [{ label: 'PLA', gramsPerPlate: 6.76, filament: { spoolPrice: 300, spoolGrams: 1000 } }],
       laborMinutesPerOrder: 0,
       laborMinutesPerPiece: 0,
       extras: [],

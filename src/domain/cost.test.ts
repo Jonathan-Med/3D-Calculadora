@@ -15,11 +15,10 @@ const settings: Settings = {
 }
 
 const job: JobInput = {
-  gramsPerPlate: 100,
   hoursPerPlate: 4,
   piecesPerPlate: 4,
   quantity: 8,
-  filament: { spoolPrice: 400, spoolGrams: 1000 },
+  materials: [{ label: 'PLA', gramsPerPlate: 100, filament: { spoolPrice: 400, spoolGrams: 1000 } }],
   laborMinutesPerOrder: 30,
   laborMinutesPerPiece: 5,
   extras: [
@@ -102,14 +101,33 @@ describe('calculateCost', () => {
     expect(partial.totals.hours).toBeCloseTo(9)
   })
 
+  it('cobra cada color con el precio de su rollo', () => {
+    // Cama de 4 piezas: 80 g de PLA blanco a $400 y 20 g de PLA seda a $600. Pedido de 8, merma 10 %.
+    const twoColors = calculateCost(
+      {
+        ...job,
+        materials: [
+          { label: 'PLA blanco', color: '#ffffff', gramsPerPlate: 80, filament: { spoolPrice: 400, spoolGrams: 1000 } },
+          { label: 'PLA seda', gramsPerPlate: 20, filament: { spoolPrice: 600, spoolGrams: 1000 } },
+        ],
+      },
+      settings,
+    )
+    expect(twoColors.materialLines).toEqual([
+      { label: 'PLA blanco', color: '#ffffff', grams: expect.closeTo(176), cost: expect.closeTo(70.4) },
+      { label: 'PLA seda', grams: expect.closeTo(44), cost: expect.closeTo(26.4) },
+    ])
+    expect(twoColors.material).toBeCloseTo(96.8)
+    expect(twoColors.totals.grams).toBeCloseTo(220)
+  })
+
   it('trata campos vacíos o inválidos como cero sin romperse', () => {
     const empty = calculateCost(
       {
-        gramsPerPlate: NaN,
         hoursPerPlate: -3,
         piecesPerPlate: 0,
         quantity: 0,
-        filament: { spoolPrice: 400, spoolGrams: 0 },
+        materials: [{ label: 'PLA', gramsPerPlate: NaN, filament: { spoolPrice: 400, spoolGrams: 0 } }],
         laborMinutesPerOrder: NaN,
         laborMinutesPerPiece: NaN,
         extras: [],
@@ -125,11 +143,10 @@ describe('calculateCost', () => {
   it('con los valores de fábrica: 9 llaveros en una cama de 90 g y 3 h', () => {
     const keychains = calculateCost(
       {
-        gramsPerPlate: 90,
         hoursPerPlate: 3,
         piecesPerPlate: 9,
         quantity: 9,
-        filament: DEFAULT_FILAMENTS[0],
+        materials: [{ label: 'PLA', gramsPerPlate: 90, filament: DEFAULT_FILAMENTS[0] }],
         laborMinutesPerOrder: 15,
         laborMinutesPerPiece: 2,
         extras: [{ name: 'Argolla', unitCost: 2, quantity: 1, per: 'piece' }],

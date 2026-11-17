@@ -17,8 +17,10 @@ const filaments: Filament[] = [
 
 const draft: QuoteDraft = {
   ...EMPTY_DRAFT,
-  filamentId: 2,
-  gramsPerPlate: 90,
+  materials: [
+    { key: 'a', filamentId: 2, grams: 60, color: '#000000' },
+    { key: 'b', filamentId: 1, grams: 30, color: '' },
+  ],
   hours: 2,
   minutes: 30,
   piecesPerPlate: 9,
@@ -26,20 +28,23 @@ const draft: QuoteDraft = {
 }
 
 describe('toJobInput', () => {
-  it('junta horas y minutos y usa el filamento elegido', () => {
+  it('junta horas y minutos y usa el filamento de cada color', () => {
     const job = toJobInput(draft, filaments)
     expect(job.hoursPerPlate).toBeCloseTo(2.5)
-    expect(job.filament.spoolPrice).toBe(420)
+    expect(job.materials).toEqual([
+      { label: 'PETG', color: '#000000', gramsPerPlate: 60, filament: filaments[1] },
+      { label: 'PLA', gramsPerPlate: 30, filament: filaments[0] },
+    ])
     expect(job.quantity).toBe(18)
   })
 
   it('usa el primer filamento si el elegido ya no existe', () => {
-    expect(pickFilament({ ...draft, filamentId: 99 }, filaments)?.id).toBe(1)
-    expect(pickFilament({ ...draft, filamentId: null }, filaments)?.id).toBe(1)
+    expect(pickFilament(99, filaments)?.id).toBe(1)
+    expect(pickFilament(null, filaments)?.id).toBe(1)
   })
 
   it('no se rompe si no hay filamentos', () => {
-    expect(toJobInput(draft, []).filament).toEqual({ spoolPrice: 0, spoolGrams: 0 })
+    expect(toJobInput(draft, []).materials[0].filament).toEqual({ spoolPrice: 0, spoolGrams: 0 })
   })
 })
 
@@ -92,12 +97,19 @@ describe('reviveDraft', () => {
     expect(reviveDraft(stored)).toEqual(draft)
   })
 
-  it('rellena campos faltantes o inválidos', () => {
-    const revived = reviveDraft({ gramsPerPlate: 50, quantity: -4, extras: 'no', hours: null })
-    expect(revived.gramsPerPlate).toBe(50)
+  it('convierte un borrador de antes, de un solo filamento', () => {
+    const revived = reviveDraft({ filamentId: 2, gramsPerPlate: 50, quantity: -4, extras: 'no', hours: null })
+    expect(revived.materials).toEqual([{ key: expect.any(String), filamentId: 2, grams: 50, color: '' }])
     expect(revived.quantity).toBe(1)
     expect(revived.hours).toBe(0)
     expect(revived.extras).toEqual([])
+  })
+
+  it('repara colores inválidos y deja siempre al menos un filamento', () => {
+    expect(reviveDraft({ materials: [{ grams: 5, color: 'rojo' }, 'x'] }).materials).toEqual([
+      { key: expect.any(String), filamentId: null, grams: 5, color: '' },
+    ])
+    expect(reviveDraft({ materials: [] }).materials).toHaveLength(1)
   })
 
   it('repara extras incompletos y descarta los que no son objetos', () => {

@@ -91,15 +91,26 @@ export interface JobExtra {
   per: 'piece' | 'order'
 }
 
-export interface JobInput {
-  /** Gramos y horas de una cama completa, tal como los da el slicer. */
+/** Un filamento de la impresión: uno por color. */
+export interface JobMaterial {
+  /** Cómo se muestra en el desglose: el nombre del filamento. */
+  label: string
+  /** Color en hexadecimal (#RRGGBB), si se conoce. */
+  color?: string
+  /** Gramos de este filamento en una cama completa, tal como los da el slicer. */
   gramsPerPlate: number
+  filament: Pick<Filament, 'spoolPrice' | 'spoolGrams'>
+}
+
+export interface JobInput {
+  /** Filamentos de una cama completa; con varios colores, uno por color. */
+  materials: JobMaterial[]
+  /** Horas de una cama completa, tal como las da el slicer. */
   hoursPerPlate: number
   /** Piezas que salen de esa cama. */
   piecesPerPlate: number
   /** Piezas que pidió el cliente. */
   quantity: number
-  filament: Pick<Filament, 'spoolPrice' | 'spoolGrams'>
   /** Trabajo que se hace una vez por pedido: diseñar, preparar el archivo, atender al cliente. */
   laborMinutesPerOrder: number
   /** Trabajo que se repite en cada pieza: quitar soportes, lijar, armar, empacar. */
@@ -108,8 +119,18 @@ export interface JobInput {
 }
 
 /** Costos del pedido completo, salvo `perPiece`. */
+export interface MaterialLine {
+  label: string
+  color?: string
+  /** Gramos de este filamento en todo el pedido, merma incluida. */
+  grams: number
+  cost: number
+}
+
 export interface CostBreakdown {
   material: number
+  /** El material desglosado por filamento, en el orden en que se capturó. */
+  materialLines: MaterialLine[]
   electricity: number
   /** Desgaste de la impresora: la parte de su precio que consume este pedido. */
   depreciation: number

@@ -14,11 +14,10 @@ const settings: Settings = {
 }
 
 const job: JobInput = {
-  gramsPerPlate: 100,
   hoursPerPlate: 4,
   piecesPerPlate: 4,
   quantity: 8,
-  filament: { spoolPrice: 400, spoolGrams: 1000 },
+  materials: [{ label: 'PLA', gramsPerPlate: 100, filament: { spoolPrice: 400, spoolGrams: 1000 } }],
   laborMinutesPerOrder: 30,
   laborMinutesPerPiece: 5,
   extras: [

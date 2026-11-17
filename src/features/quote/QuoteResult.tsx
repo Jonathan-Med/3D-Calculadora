@@ -25,8 +25,8 @@ interface Props {
   onChange: (changes: Partial<QuoteDraft>) => void
   onSave: (status: SavedQuote['status']) => Promise<void>
   scenarios: QuantityScenario[]
-  /** Piezas que salen de un rollo; null si aún no hay gramos capturados. */
-  spool: { pieces: number; name: string } | null
+  /** Piezas que salen de un rollo de cada filamento; vacío si aún no hay gramos capturados. */
+  spools: { pieces: number; name: string; color?: string }[]
   laborMinutes: number
   settings: Settings
 }
@@ -40,7 +40,7 @@ export function QuoteResult({
   onChange,
   onSave,
   scenarios,
-  spool,
+  spools,
   laborMinutes,
   settings,
 }: Props) {
@@ -180,13 +180,23 @@ export function QuoteResult({
 
       {chosen && <SaveCard draft={draft} chosen={chosen} onSave={onSave} />}
 
-      {spool && (
+      {spools.length > 0 && (
         <Card title="Lotes y rollo">
-          <p className="text-sm">
-            De un rollo de <span className="font-medium">{spool.name}</span> salen{' '}
-            <span className="font-semibold tabular-nums">{plural(spool.pieces, 'pieza', 'piezas')}</span>,
-            con la merma incluida.
-          </p>
+          <ul className="space-y-1 text-sm">
+            {spools.map((spool, index) => (
+              <li key={index} className="flex items-center gap-2">
+                {spool.color && <Swatch color={spool.color} />}
+                <span>
+                  De un rollo de <span className="font-medium">{spool.name}</span> salen{' '}
+                  <span className="font-semibold tabular-nums">
+                    {plural(spool.pieces, 'pieza', 'piezas')}
+                  </span>
+                  {spools.length === 1 && ', con la merma incluida'}.
+                </span>
+              </li>
+            ))}
+          </ul>
+          {spools.length > 1 && <p className="mt-1 text-xs text-muted">Con la merma incluida.</p>}
 
           <h3 className="mt-5 text-sm font-semibold">Si te piden más o menos piezas</h3>
           <div className="mt-2 overflow-x-auto">
@@ -312,8 +322,14 @@ function Breakdown({
   laborMinutes: number
   settings: Settings
 }) {
+  const colors = cost.materialLines.filter((line) => line.grams > 0)
   const lines = [
-    { label: 'Material', detail: `${grams(cost.totals.grams)}, merma incluida`, value: cost.material },
+    {
+      label: 'Material',
+      detail: `${grams(cost.totals.grams)}${colors.length > 1 ? ` en ${colors.length} colores` : ''}, merma incluida`,
+      value: cost.material,
+      parts: colors.length > 1 ? colors : [],
+    },
     { label: 'Luz', detail: `${duration(cost.totals.hours)} de impresión`, value: cost.electricity },
     { label: 'Desgaste de la impresora', detail: 'Para reponerla algún día', value: cost.depreciation },
     { label: 'Repuestos', detail: 'Boquilla, placa y mantenimiento', value: cost.maintenance },
@@ -347,10 +363,36 @@ function Breakdown({
             <div className="mt-1 h-1.5 rounded-full bg-surface-2">
               <div className="h-full rounded-full bg-accent" style={{ width: `${share}%` }} />
             </div>
+            {line.parts && line.parts.length > 0 && (
+              <ul className="mt-1.5 space-y-1 pl-3 text-xs text-muted">
+                {line.parts.map((part, index) => (
+                  <li key={index} className="flex items-center justify-between gap-3">
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      {part.color && <Swatch color={part.color} />}
+                      <span className="truncate">
+                        {part.label} · {grams(part.grams)}
+                      </span>
+                    </span>
+                    <span className="shrink-0 tabular-nums">{money(part.cost)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </li>
         )
       })}
     </ul>
+  )
+}
+
+/** Muestra del color de un filamento. */
+function Swatch({ color }: { color: string }) {
+  return (
+    <span
+      className="inline-block size-3 shrink-0 rounded-full border border-line"
+      style={{ background: color }}
+      aria-hidden
+    />
   )
 }
 

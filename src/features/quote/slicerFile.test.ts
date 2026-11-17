@@ -1,6 +1,8 @@
 import { strToU8, zipSync } from 'fflate'
 import { describe, expect, it } from 'vitest'
+import type { Filament } from '../../domain/types'
 import {
+  matchFilament,
   parseDuration,
   parseGcodeText,
   parseSliceInfo,
@@ -54,15 +56,46 @@ const zipFile = (files: Record<string, string>, name: string) =>
 describe('parseSliceInfo', () => {
   it('lee tiempo, gramos y piezas de cada cama', () => {
     expect(parseSliceInfo(SLICE_INFO)).toEqual([
-      { plate: 1, seconds: 5025, grams: 15.67, pieces: 2, materials: ['PLA'] },
-      { plate: 2, seconds: 600, grams: 4, pieces: 1, materials: ['PLA', 'PETG'] },
+      {
+        plate: 1,
+        seconds: 5025,
+        grams: 15.67,
+        pieces: 2,
+        filaments: [{ type: 'PLA', color: '#ffffff', grams: 15.67 }],
+      },
+      {
+        plate: 2,
+        seconds: 600,
+        grams: 4,
+        pieces: 1,
+        filaments: [
+          { type: 'PLA', color: '#ffffff', grams: 2.5 },
+          { type: 'PETG', color: '#000000', grams: 1.5 },
+        ],
+      },
     ])
   })
 
   it('deja en null lo que una cama sin laminar no trae', () => {
     expect(parseSliceInfo('<config><plate><metadata key="index" value="1"/></plate></config>')).toEqual([
-      { plate: 1, seconds: null, grams: null, pieces: null, materials: [] },
+      { plate: 1, seconds: null, grams: null, pieces: null, filaments: [] },
     ])
+  })
+
+  it('usa la suma de los colores aunque el total diga otra cosa, y quita los que no se usan', () => {
+    const xml = `<config><plate>
+      <metadata key="index" value="1"/><metadata key="prediction" value="60"/><metadata key="weight" value="9"/>
+      <filament id="1" type="PLA" color="#FF0000FF" used_g="3"/>
+      <filament id="2" type="PLA" color="#00FF00FF" used_g="0"/>
+      <filament id="3" type="PLA" color="#0000FFFF" used_g="4.5"/>
+    </plate></config>`
+    expect(parseSliceInfo(xml)[0]).toMatchObject({
+      grams: 7.5,
+      filaments: [
+        { type: 'PLA', color: '#ff0000', grams: 3 },
+        { type: 'PLA', color: '#0000ff', grams: 4.5 },
+      ],
+    })
   })
 })
 
@@ -79,28 +112,66 @@ describe('parseDuration', () => {
 
 describe('parseGcodeText', () => {
   it('lee el encabezado de Bambu Studio usando el tiempo total, no solo el del modelo', () => {
-    expect(parseGcodeText(BAMBU_HEADER)).toEqual({ seconds: 5025, grams: 15.67 })
+    expect(parseGcodeText(BAMBU_HEADER)).toEqual({
+      seconds: 5025,
+      grams: 15.67,
+      filaments: [{ type: '', color: '', grams: 15.67 }],
+    })
   })
 
-  it('lee los totales que PrusaSlicer pone al final', () => {
-    const text = 'G1 X1\n; filament used [g] = 3.20, 1.30\n; estimated printing time (normal mode) = 2h 5m 0s\n'
-    expect(parseGcodeText(text)).toEqual({ seconds: 7500, grams: 4.5 })
+  it('suma todos los colores de Bambu Studio, no solo el primero', () => {
+    const text = `; total estimated time: 1h 0m 0s
+; total filament weight [g] : 2.81,0.00,0.37
+G28
+; filament_type = PLA;PLA;PETG
+; filament_colour = #FFFFFF;#FF0000;#000000
+`
+    expect(parseGcodeText(text)).toEqual({
+      seconds: 3600,
+      grams: 3.18,
+      filaments: [
+        { type: 'PLA', color: '#ffffff', grams: 2.81 },
+        { type: 'PETG', color: '#000000', grams: 0.37 },
+      ],
+    })
   })
 
-  it('prefiere el total de gramos sobre el desglose', () => {
-    const text = '; filament used [g] = 3.20, 1.30\n; total filament used [g] = 4.50\n'
-    expect(parseGcodeText(text).grams).toBe(4.5)
+  it('lee el desglose que PrusaSlicer pone al final', () => {
+    const text =
+      'G1 X1\n; filament used [g] = 3.20, 1.30\n; total filament used [g] = 4.50\n' +
+      '; estimated printing time (normal mode) = 2h 5m 0s\n; filament_colour = #FF8000;#FFFFFF\n'
+    expect(parseGcodeText(text)).toEqual({
+      seconds: 7500,
+      grams: 4.5,
+      filaments: [
+        { type: '', color: '#ff8000', grams: 3.2 },
+        { type: '', color: '#ffffff', grams: 1.3 },
+      ],
+    })
+  })
+
+  it('no pone colores si no hay uno por cada filamento', () => {
+    const text = '; total filament weight [g] : 2,1\n; filament_colour = #FFFFFF;#FF0000;#000000\n'
+    expect(parseGcodeText(text).filaments.map((filament) => filament.color)).toEqual(['', ''])
   })
 
   it('lee el tiempo de Cura aunque no traiga gramos', () => {
     expect(parseGcodeText(';FLAVOR:Marlin\n;TIME:3600\n;Filament used: 1.2m\n')).toEqual({
       seconds: 3600,
       grams: null,
+      filaments: [],
     })
   })
 })
 
 describe('readSlicerFile', () => {
+  it('lee los dos colores de un .gcode.3mf', async () => {
+    const result = await readSlicerFile(
+      zipFile({ 'Metadata/slice_info.config': SLICE_INFO }, 'dos-colores.gcode.3mf'),
+    )
+    expect(result.ok && result.plates[1].filaments.map((filament) => filament.grams)).toEqual([2.5, 1.5])
+  })
+
   it('lee un .gcode.3mf de Bambu Studio', async () => {
     const file = zipFile(
       { 'Metadata/slice_info.config': SLICE_INFO, 'Metadata/plate_1.gcode': BAMBU_HEADER, '3D/3dmodel.model': '<model/>' },
@@ -120,7 +191,15 @@ describe('readSlicerFile', () => {
     )
     expect(await readSlicerFile(file)).toEqual({
       ok: true,
-      plates: [{ plate: 1, seconds: 5025, grams: 15.67, pieces: null, materials: [] }],
+      plates: [
+        {
+          plate: 1,
+          seconds: 5025,
+          grams: 15.67,
+          pieces: null,
+          filaments: [{ type: '', color: '', grams: 15.67 }],
+        },
+      ],
     })
   })
 
@@ -134,7 +213,15 @@ describe('readSlicerFile', () => {
     const result = await readSlicerFile(new File([BAMBU_HEADER], 'pieza.gcode'))
     expect(result).toEqual({
       ok: true,
-      plates: [{ plate: 1, seconds: 5025, grams: 15.67, pieces: null, materials: [] }],
+      plates: [
+        {
+          plate: 1,
+          seconds: 5025,
+          grams: 15.67,
+          pieces: null,
+          filaments: [{ type: '', color: '', grams: 15.67 }],
+        },
+      ],
     })
   })
 
@@ -144,20 +231,62 @@ describe('readSlicerFile', () => {
   })
 })
 
+const catalog: Filament[] = [
+  { id: 1, name: 'PLA 1 kg', spoolPrice: 350, spoolGrams: 1000 },
+  { id: 2, name: 'PETG negro', spoolPrice: 420, spoolGrams: 1000 },
+  { id: 3, name: 'PLA seda', spoolPrice: 500, spoolGrams: 1000 },
+]
+
+describe('matchFilament', () => {
+  it('se queda con el elegido si es del mismo tipo', () => {
+    expect(matchFilament('PLA', catalog, 3)).toBe(3)
+  })
+
+  it('busca uno del tipo si el elegido es de otro', () => {
+    expect(matchFilament('PETG', catalog, 1)).toBe(2)
+  })
+
+  it('deja el elegido si ninguno es de ese tipo o el slicer no lo dice', () => {
+    expect(matchFilament('ABS', catalog, 1)).toBe(1)
+    expect(matchFilament('', catalog, 3)).toBe(3)
+  })
+})
+
 describe('plateToDraft', () => {
+  const withoutKeys = (changes: ReturnType<typeof plateToDraft>) => ({
+    ...changes,
+    materials: changes.materials?.map(({ filamentId, grams, color }) => ({ filamentId, grams, color })),
+  })
+
   it('redondea el tiempo al minuto y lo parte en horas y minutos', () => {
-    expect(plateToDraft({ plate: 1, seconds: 5025, grams: 15.674, pieces: 2, materials: [] })).toEqual({
-      gramsPerPlate: 15.67,
+    const plate = { plate: 1, seconds: 5025, grams: 15.674, pieces: 2, filaments: [] }
+    expect(withoutKeys(plateToDraft(plate, catalog, 1))).toEqual({
+      materials: [{ filamentId: 1, grams: 15.67, color: '' }],
       hours: 1,
       minutes: 24,
       piecesPerPlate: 2,
     })
   })
 
+  it('pone un renglón por color con su filamento', () => {
+    const plate = {
+      plate: 1,
+      seconds: null,
+      grams: 4,
+      pieces: null,
+      filaments: [
+        { type: 'PLA', color: '#ffffff', grams: 2.5 },
+        { type: 'PETG', color: '#000000', grams: 1.5 },
+      ],
+    }
+    expect(withoutKeys(plateToDraft(plate, catalog, 1)).materials).toEqual([
+      { filamentId: 1, grams: 2.5, color: '#ffffff' },
+      { filamentId: 2, grams: 1.5, color: '#000000' },
+    ])
+  })
+
   it('no toca lo que el archivo no traía', () => {
-    expect(plateToDraft({ plate: 1, seconds: 3600, grams: null, pieces: null, materials: [] })).toEqual({
-      hours: 1,
-      minutes: 0,
-    })
+    const plate = { plate: 1, seconds: 3600, grams: null, pieces: null, filaments: [] }
+    expect(plateToDraft(plate)).toEqual({ hours: 1, minutes: 0 })
   })
 })

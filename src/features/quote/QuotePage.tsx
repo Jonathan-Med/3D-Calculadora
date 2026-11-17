@@ -10,7 +10,6 @@ import {
   choosePrice,
   DRAFT_STORAGE_KEY,
   EMPTY_DRAFT,
-  pickFilament,
   reviveDraft,
   toJobInput,
   type QuoteDraft,
@@ -36,12 +35,23 @@ export function QuotePage({ settings, filaments, catalog }: Props) {
       ? evaluatePrice(cost, draft.customUnitPrice * cost.totals.pieces)
       : null
 
-  const filament = pickFilament(draft, filaments)
-  const gramsPerPiece = job.gramsPerPlate / Math.max(1, Math.floor(job.piecesPerPlate))
-  const spool =
-    filament && gramsPerPiece > 0
-      ? { pieces: piecesPerSpool(gramsPerPiece, filament, settings.wastePercent), name: filament.name }
-      : null
+  // Cuántas piezas salen de un rollo de cada filamento que se usa.
+  const piecesPerPlate = Math.max(1, Math.floor(job.piecesPerPlate))
+  const spools = job.materials.flatMap((material) =>
+    material.gramsPerPlate > 0 && material.filament.spoolGrams > 0
+      ? [
+          {
+            name: material.label,
+            color: material.color,
+            pieces: piecesPerSpool(
+              material.gramsPerPlate / piecesPerPlate,
+              material.filament,
+              settings.wastePercent,
+            ),
+          },
+        ]
+      : [],
+  )
 
   const laborMinutes = draft.laborMinutesPerOrder + draft.laborMinutesPerPiece * cost.totals.pieces
   const chosen = choosePrice(draft, prices, customPrice)
@@ -84,7 +94,7 @@ export function QuotePage({ settings, filaments, catalog }: Props) {
           onChange={change}
           onSave={save}
           scenarios={quantityScenarios(job, settings)}
-          spool={spool}
+          spools={spools}
           laborMinutes={laborMinutes}
           settings={settings}
         />
