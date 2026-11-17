@@ -15,6 +15,7 @@ import type { ExtraItem, Filament, Settings } from '../../domain/types'
 import { money } from '../../lib/format'
 import { ROUTE_HREF } from '../../lib/useHashRoute'
 import { newExtraKey, pickFilament, type DraftExtra, type QuoteDraft } from './draft'
+import { SlicerImport } from './SlicerImport'
 
 interface Props {
   draft: QuoteDraft
@@ -41,7 +42,7 @@ export function QuoteForm({ draft, onChange, onReset, settings, filaments, catal
     <div className="min-w-0 space-y-4">
       <Card
         title="Impresión"
-        description="Copia estos datos de Bambu Studio después de laminar."
+        description="Sube el archivo laminado de Bambu Studio o copia sus datos a mano."
         action={
           <Button variant="ghost" onClick={onReset}>
             <RotateCcw size={16} aria-hidden /> Limpiar
@@ -49,6 +50,10 @@ export function QuoteForm({ draft, onChange, onReset, settings, filaments, catal
         }
       >
         <div className="grid grid-cols-2 gap-4">
+          <div className="col-span-2">
+            <SlicerImport onChange={onChange} />
+          </div>
+
           <div className="col-span-2">
             <Field
               label="Filamento"
